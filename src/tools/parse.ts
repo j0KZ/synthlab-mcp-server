@@ -4,9 +4,9 @@
  * Reads a .pd file (from disk or raw text) and returns a structured description.
  */
 
-import fs from "node:fs/promises";
 import path from "node:path";
 import { parsePatch } from "../core/parser.js";
+import { resolveSource } from "../utils/resolve-source.js";
 import type { PdPatch, PdCanvas, PdNode } from "../types.js";
 
 /**
@@ -15,18 +15,7 @@ import type { PdPatch, PdCanvas, PdNode } from "../types.js";
  * @returns Structured text description of the patch
  */
 export async function executeParsePatch(source: string): Promise<string> {
-  let pdText: string;
-  let filePath: string | undefined;
-
-  if (source.trimStart().startsWith("#N canvas") || source.trimStart().startsWith("#N")) {
-    // Raw .pd text
-    pdText = source;
-  } else {
-    // File path
-    filePath = path.resolve(source);
-    pdText = await fs.readFile(filePath, "utf-8");
-  }
-
+  const { pdText, filePath } = await resolveSource(source);
   const patch = parsePatch(pdText);
   return formatPatch(patch, filePath);
 }

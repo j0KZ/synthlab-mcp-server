@@ -1,0 +1,10 @@
+#N canvas 0 50 800 600 12;
+#X obj 50 50 osc~ 440;
+#X obj 50 100 *~ 0.1;
+#X obj 50 150 dac~;
+#X obj 200 50 metro 500;
+#X obj 200 100 random 100;
+#X text 50 250 connected objects above and orphan below;
+#X connect 0 0 1 0;
+#X connect 1 0 2 0;
+#X connect 1 0 2 1;

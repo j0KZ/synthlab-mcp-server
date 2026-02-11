@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-blueviolet)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-17%2F17-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-91%2F91-brightgreen)]()
 
 ---
 
@@ -88,7 +88,22 @@ Parses Pure Data's text-based format into a typed Abstract Syntax Tree with supp
 Produces a `.pd` file that opens cleanly in Pure Data 0.54+.
 
 ### Object Registry
-Categorized database of ~100 Pd-vanilla objects across math, MIDI, time, audio, control, data, GUI, and subpatch categories. Used for validation and object discovery.
+Categorized database of ~95 Pd-vanilla objects across math, MIDI, time, audio, control, data, GUI, and subpatch categories. Each entry includes inlet/outlet counts (with variable-count support for objects like `select`, `pack`, `trigger`), aliases, and signal type classification. Used for validation, analysis, and object discovery.
+
+### Patch Validator — Structural integrity checks
+Detects 9 categories of issues across your patch:
+- **Broken connections** — source/target node doesn't exist, outlet/inlet index out of bounds
+- **Duplicate connections** — same wire appearing twice (usually a mistake)
+- **Unknown objects** — not in the Pd-vanilla registry (possible external or typo)
+- **Orphan objects** — no connections at all (with smart exceptions for wireless, GUI, data objects)
+- **Empty subpatches** — subpatch with zero nodes
+- **Missing DSP sink** — audio objects exist but no `dac~`, `writesf~`, etc.
+
+### Patch Analyzer — Deep structural analysis
+- **Object counts** by category (audio, control, MIDI, math, etc.)
+- **Signal flow graph** — adjacency list with topological sort (Kahn's algorithm), cycle detection
+- **DSP chain detection** — DFS from audio sources (`osc~`, `noise~`, `adc~`) to sinks (`dac~`, `writesf~`)
+- **Complexity scoring** — 0-100 weighted score based on object count, connection density, subpatch depth, audio chains, and object variety
 
 ---
 
@@ -155,11 +170,35 @@ Generate a valid `.pd` file from a JSON specification.
 
 **Example prompt**: *"Create a 4-voice polysynth with ADSR envelopes"*
 
-### Planned tools (Phase 2-4)
+### `validate_patch`
+
+Validate a `.pd` file for structural issues.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | `string` | File path to a `.pd` file, or raw `.pd` text |
+
+**Output**: Validation report with errors, warnings, and info grouped by severity.
+
+**Checks**: Broken connections, out-of-bounds inlets/outlets, duplicate wires, unknown objects, orphan nodes, empty subpatches, missing DSP sinks.
+
+**Example prompt**: *"Validate my patch and tell me what's broken"*
+
+### `analyze_patch`
+
+Analyze a `.pd` file for object counts, signal flow, DSP chains, and complexity.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | `string` | File path to a `.pd` file, or raw `.pd` text |
+
+**Output**: Full analysis report — object counts by category, topological signal flow, detected audio chains, complexity score (0-100), and validation results.
+
+**Example prompt**: *"Analyze this patch — how complex is it and what's the signal flow?"*
+
+### Planned tools (Phase 3-5)
 | Tool | Purpose |
 |------|---------|
-| `analyze_patch` | Signal flow graph, DSP chain detection, complexity metrics |
-| `validate_patch` | Find broken connections, orphan objects, missing externals |
 | `create_from_template` | Generate from parameterized templates (synth, sequencer, etc.) |
 | `send_message` | OSC/FUDI messages to a running Pd instance |
 
@@ -187,25 +226,38 @@ The parser handles the full syntax: subpatches (`#N canvas` ... `#X restore`), a
 
 ```
 src/
-├── index.ts              # MCP server entry — tool registration, stdio transport
+├── index.ts              # MCP server entry — 4 tools registered, stdio transport
 ├── types.ts              # PdPatch, PdCanvas, PdNode, PdConnection interfaces
-├── constants.ts          # Object registry, format constants, layout defaults
+├── constants.ts          # Format constants, layout defaults
 ├── core/
 │   ├── parser.ts         # .pd text → AST (statement splitter, canvas stack)
-│   └── serializer.ts     # AST → .pd text + buildPatch() from spec
+│   ├── serializer.ts     # AST → .pd text + buildPatch() from spec
+│   ├── object-registry.ts # ~95 Pd-vanilla objects with port counts + aliases
+│   └── validator.ts      # 9 structural checks (broken connections, orphans, etc.)
 ├── schemas/
-│   └── patch.ts          # Zod input validation for MCP tools
-└── tools/
-    ├── parse.ts          # parse_patch tool implementation
-    └── generate.ts       # generate_patch tool implementation
+│   ├── patch.ts          # Zod schemas for parse/generate tools
+│   └── analyze.ts        # Zod schemas for validate/analyze tools
+├── tools/
+│   ├── parse.ts          # parse_patch tool
+│   ├── generate.ts       # generate_patch tool
+│   ├── validate.ts       # validate_patch tool
+│   └── analyze.ts        # analyze_patch tool (signal flow, DSP chains, complexity)
+└── utils/
+    └── resolve-source.ts # Shared file-path vs raw-text resolver
 
 tests/
-├── parser.test.ts        # 12 tests — parsing objects, connections, subpatches
-├── serializer.test.ts    # 5 tests — round-trip fidelity, spec builder
+├── parser.test.ts           # 12 tests — parsing objects, connections, subpatches
+├── serializer.test.ts       # 5 tests — round-trip fidelity, spec builder
+├── object-registry.test.ts  # 37 tests — port counts, aliases, variable objects
+├── validator.test.ts        # 20 tests — each check type + fixture validation
+├── analyze.test.ts          # 17 tests — counts, flow, DSP chains, complexity
 └── fixtures/
-    ├── hello-world.pd    # Minimal: osc~ → *~ → dac~
-    ├── midi-sequencer.pd # 4-step sequencer with noteout
-    └── subpatch.pd       # Nested canvas with inlet~/outlet~
+    ├── hello-world.pd       # Minimal: osc~ → *~ → dac~
+    ├── midi-sequencer.pd    # 4-step sequencer with noteout
+    ├── subpatch.pd          # Nested canvas with inlet~/outlet~
+    ├── broken-connections.pd # Invalid connections for validator testing
+    ├── orphan-objects.pd    # Disconnected objects for orphan detection
+    └── complex-patch.pd     # Multi-chain audio + control + subpatch
 ```
 
 ---
@@ -215,7 +267,7 @@ tests/
 ```bash
 npm run build        # Compile with tsup (ESM + declarations)
 npm run dev          # Watch mode
-npm run test         # Run vitest (17 tests)
+npm run test         # Run vitest (91 tests)
 npm run lint         # Type-check with tsc --noEmit
 npm run inspect      # Test server with MCP Inspector
 ```
@@ -238,7 +290,7 @@ npm run inspect      # Test server with MCP Inspector
 ## Roadmap
 
 - [x] **Phase 1**: Core parser + serializer + MCP scaffold
-- [ ] **Phase 2**: Patch analysis + validation (signal flow graph, broken connection detection)
+- [x] **Phase 2**: Patch analysis + validation (object registry, signal flow, DSP chains, complexity scoring)
 - [ ] **Phase 3**: Patch templates (synth, sequencer, delay, reverb, mixer)
 - [ ] **Phase 4**: Live control via OSC/FUDI (send messages to running Pd)
 - [ ] **Phase 5**: npm publish (`npx puredata-mcp-server`) + CI/CD

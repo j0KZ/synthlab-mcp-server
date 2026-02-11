@@ -12,6 +12,8 @@ import { z } from "zod";
 
 import { executeParsePatch } from "./tools/parse.js";
 import { executeGeneratePatch, formatGenerateResult } from "./tools/generate.js";
+import { executeValidatePatch } from "./tools/validate.js";
+import { executeAnalyzePatch } from "./tools/analyze.js";
 
 const server = new McpServer({
   name: "puredata-mcp-server",
@@ -105,6 +107,66 @@ server.tool(
       const msg = error instanceof Error ? error.message : String(error);
       return {
         content: [{ type: "text", text: `Error generating patch: ${msg}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tool: validate_patch
+// ---------------------------------------------------------------------------
+
+server.tool(
+  "validate_patch",
+  "Validate a Pure Data .pd file for structural issues: broken connections, orphan objects, unknown objects, missing DSP sinks.",
+  {
+    source: z
+      .string()
+      .min(1)
+      .describe(
+        "Absolute file path to a .pd file, or raw .pd text content. " +
+          "If it starts with '#N canvas' it is treated as raw text."
+      ),
+  },
+  async ({ source }) => {
+    try {
+      const result = await executeValidatePatch(source);
+      return { content: [{ type: "text", text: result }] };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: `Error validating patch: ${msg}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tool: analyze_patch
+// ---------------------------------------------------------------------------
+
+server.tool(
+  "analyze_patch",
+  "Analyze a Pure Data .pd file: object counts by category, signal flow graph, DSP chain detection, complexity scoring, and validation.",
+  {
+    source: z
+      .string()
+      .min(1)
+      .describe(
+        "Absolute file path to a .pd file, or raw .pd text content. " +
+          "If it starts with '#N canvas' it is treated as raw text."
+      ),
+  },
+  async ({ source }) => {
+    try {
+      const result = await executeAnalyzePatch(source);
+      return { content: [{ type: "text", text: result }] };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: `Error analyzing patch: ${msg}` }],
         isError: true,
       };
     }
