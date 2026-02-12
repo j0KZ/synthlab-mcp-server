@@ -18,7 +18,7 @@ import type {
   PatchNodeSpec,
   PatchConnectionSpec,
 } from "../core/serializer.js";
-import type { RackableSpec, PortInfo } from "./port-info.js";
+import type { RackableSpec, PortInfo, ParameterDescriptor } from "./port-info.js";
 import type { OscillatorVariant } from "./modules/oscillator.js";
 import type { FilterVariant } from "./modules/filter.js";
 import type { EnvelopeVariant, EnvelopeParams } from "./modules/envelope.js";
@@ -410,5 +410,47 @@ export function buildSynth(params: SynthParams = {}): RackableSpec {
     ports.push({ name: "gate", type: "control", direction: "input", nodeIndex: gateAtom, port: 0 });
   }
 
-  return { spec: { nodes, connections }, ports };
+  // ─── Parameters (controller integration) ─────────
+  const parameters: ParameterDescriptor[] = [
+    {
+      name: "cutoff",
+      label: "Filter Cutoff",
+      min: 20,
+      max: 20000,
+      default: cutoff,
+      unit: "Hz",
+      curve: "exponential",
+      nodeIndex: filterOut,
+      inlet: 1,
+      category: "filter",
+    },
+    {
+      name: "amplitude",
+      label: "Amplitude",
+      min: 0,
+      max: 1,
+      default: amplitude,
+      unit: "",
+      curve: "linear",
+      nodeIndex: gain,
+      inlet: 1,
+      category: "amplitude",
+    },
+  ];
+  if (needsResonance) {
+    parameters.push({
+      name: "resonance",
+      label: "Filter Resonance",
+      min: 0.1,
+      max: filterType === "moog" ? 4 : 100,
+      default: filterType === "moog" ? 2.5 : 1,
+      unit: "",
+      curve: "exponential",
+      nodeIndex: filterOut,
+      inlet: 2,
+      category: "filter",
+    });
+  }
+
+  return { spec: { nodes, connections }, ports, parameters };
 }

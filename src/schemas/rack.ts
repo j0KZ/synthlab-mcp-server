@@ -44,6 +44,41 @@ export const createRackSchema = {
     )
     .optional()
     .describe("Inter-module connections for the combined _rack.pd patch."),
+  controller: z
+    .object({
+      device: z
+        .string()
+        .describe('Controller device name (currently: "k2").'),
+      midiChannel: z
+        .number()
+        .int()
+        .min(1)
+        .max(16)
+        .optional()
+        .describe("MIDI channel (1-16). Default: device default (16 for K2)."),
+      mappings: z
+        .array(
+          z.object({
+            control: z
+              .string()
+              .describe('Control name on device (e.g. "fader1", "pot3").'),
+            module: z.string().describe("Module ID in the rack."),
+            parameter: z
+              .string()
+              .describe(
+                'Parameter name on the module (e.g. "cutoff", "volume_ch1").',
+              ),
+          }),
+        )
+        .optional()
+        .describe(
+          "Custom control-to-parameter mappings. Auto-mapped if omitted.",
+        ),
+    })
+    .optional()
+    .describe(
+      "MIDI controller configuration. Generates _controller.pd for hardware control of rack parameters.",
+    ),
   outputDir: z
     .string()
     .optional()

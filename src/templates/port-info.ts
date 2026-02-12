@@ -33,10 +33,46 @@ export interface PortInfo {
   ioNodeIndex?: number;
 }
 
+export type ParameterCategory = "filter" | "oscillator" | "amplitude" | "effect" | "transport";
+
 /**
- * A template's PatchSpec enriched with port metadata for rack wiring.
+ * Describes a runtime-controllable parameter on a template.
+ *
+ * Parameters target audio object control inlets directly (not floatatoms).
+ * In Pd, `lop~ 1000` accepts a float on inlet 1 to change cutoff;
+ * `*~ 0.3` accepts a float on inlet 1 to change gain.
+ * The existing loadbang → msg chain provides the initial value;
+ * a receive bus provides runtime override.
+ */
+export interface ParameterDescriptor {
+  /** Parameter identifier: "cutoff", "volume_ch1", "amplitude" */
+  name: string;
+  /** Human-readable label: "Filter Cutoff", "Channel 1 Volume" */
+  label: string;
+  /** Parameter minimum value */
+  min: number;
+  /** Parameter maximum value */
+  max: number;
+  /** Default value (set by loadbang chain) */
+  default: number;
+  /** Unit label: "Hz", "", "dB" */
+  unit: string;
+  /** Scaling curve for MIDI → parameter mapping */
+  curve: "linear" | "exponential";
+  /** Index into PatchSpec.nodes[] — the target node to control */
+  nodeIndex: number;
+  /** Which inlet on the target node receives the value */
+  inlet: number;
+  /** Auto-mapping category hint */
+  category: ParameterCategory;
+}
+
+/**
+ * A template's PatchSpec enriched with port metadata for rack wiring
+ * and optional parameter descriptors for controller integration.
  */
 export interface RackableSpec {
   spec: PatchSpec;
   ports: PortInfo[];
+  parameters?: ParameterDescriptor[];
 }

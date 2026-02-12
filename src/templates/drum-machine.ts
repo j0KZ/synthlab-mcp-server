@@ -15,7 +15,7 @@ import type {
   PatchNodeSpec,
   PatchConnectionSpec,
 } from "../core/serializer.js";
-import type { RackableSpec } from "./port-info.js";
+import type { RackableSpec, ParameterDescriptor } from "./port-info.js";
 import { validateDrumMachineParams } from "./validate-params.js";
 
 export type DrumVoice = "bd" | "sn" | "hh" | "cp";
@@ -305,5 +305,20 @@ export function buildDrumMachine(params: DrumMachineParams = {}): RackableSpec {
   }
   ports.push({ name: "audio", type: "audio" as const, direction: "output" as const, nodeIndex: gain, port: 0, ioNodeIndex: dac });
 
-  return { spec: { nodes, connections }, ports };
+  const parameters: ParameterDescriptor[] = [
+    {
+      name: "volume",
+      label: "Master Volume",
+      min: 0,
+      max: 1,
+      default: amplitude,
+      unit: "",
+      curve: "linear",
+      nodeIndex: gain,
+      inlet: 1,
+      category: "amplitude",
+    },
+  ];
+
+  return { spec: { nodes, connections }, ports, parameters };
 }

@@ -4,6 +4,7 @@
  * Generates an entire Eurorack-style rack of Pd patches at once:
  * individual .pd files per module + a combined _rack.pd.
  * Supports inter-module wiring via throw~/catch~ and send/receive buses.
+ * Supports MIDI controller integration via ctlin → send/receive parameter buses.
  */
 
 import { writeFile, mkdir } from "node:fs/promises";
@@ -14,9 +15,15 @@ import {
   type PatchNodeSpec,
   type PatchConnectionSpec,
 } from "../core/serializer.js";
-import { buildTemplate, buildTemplateWithPorts } from "../templates/index.js";
-import type { PortInfo } from "../templates/port-info.js";
+import { buildTemplateWithPorts } from "../templates/index.js";
+import type { PortInfo, ParameterDescriptor } from "../templates/port-info.js";
 import { applyWiring, type WireSpec, type WiringModule } from "../wiring/bus-injector.js";
+import { getDevice } from "../devices/index.js";
+import { autoMap } from "../controllers/auto-mapper.js";
+import { buildControllerPatch } from "../controllers/pd-controller.js";
+import { injectParameterReceivers } from "../controllers/param-injector.js";
+import { generateK2DeckConfig } from "../controllers/k2-deck-config.js";
+import type { ControllerConfig, ControllerMapping, CustomMapping } from "../controllers/types.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -32,6 +39,7 @@ export interface RackModuleSpec {
 export interface CreateRackInput {
   modules: RackModuleSpec[];
   wiring?: WireSpec[];
+  controller?: ControllerConfig;
   outputDir?: string;
 }
 
@@ -108,20 +116,30 @@ function autoFilename(template: string, usedNames: Set<string>): string {
 
 const COLUMN_WIDTH = 400;
 
+interface CombinedModule {
+  name: string;
+  spec: PatchSpec;
+  ports: PortInfo[];
+  parameters?: ParameterDescriptor[];
+  id: string;
+}
+
 function buildCombinedPatch(
-  modules: { name: string; spec: PatchSpec; ports: PortInfo[]; id: string }[],
+  modules: CombinedModule[],
   wiring?: WireSpec[],
+  controllerMappings?: ControllerMapping[],
 ): string {
   const allNodes: PatchNodeSpec[] = [];
   const allConnections: PatchConnectionSpec[] = [];
   const wiringModules: WiringModule[] = [];
+  const paramModules: { id: string; parameters: ParameterDescriptor[]; nodeOffset: number }[] = [];
 
   // Rack title as node[0]
   allNodes.push({ type: "text", args: ["=== RACK ==="], x: 50, y: 10 });
   let nodeOffset = 1;
 
   for (let i = 0; i < modules.length; i++) {
-    const { name, spec: rawSpec, ports, id } = modules[i];
+    const { name, spec: rawSpec, ports, parameters, id } = modules[i];
     const xOffset = i * COLUMN_WIDTH;
 
     // Deduplicate table names for combined patch (Audit fix #1)
@@ -138,6 +156,11 @@ function buildCombinedPatch(
 
     // Track module offset for wiring (section label counted above)
     wiringModules.push({ id, ports, nodeOffset });
+
+    // Track module offset for parameter injection
+    if (parameters && parameters.length > 0) {
+      paramModules.push({ id, parameters, nodeOffset });
+    }
 
     // Add nodes with X offset and local Y auto-layout
     // Nodes without explicit Y must be laid out based on their local index
@@ -170,6 +193,11 @@ function buildCombinedPatch(
     applyWiring(allNodes, allConnections, wiringModules, wiring);
   }
 
+  // Inject parameter receivers for controller integration
+  if (controllerMappings && controllerMappings.length > 0) {
+    injectParameterReceivers(allNodes, allConnections, paramModules, controllerMappings);
+  }
+
   // title: undefined — we manually inserted our title as allNodes[0],
   // so buildPatch must NOT shift indices again.
   return buildPatch({ title: undefined, nodes: allNodes, connections: allConnections });
@@ -182,44 +210,104 @@ function buildCombinedPatch(
 export async function executeCreateRack(
   input: CreateRackInput,
 ): Promise<string> {
-  const { modules, wiring, outputDir } = input;
+  const { modules, wiring, controller, outputDir } = input;
   const usedNames = new Set<string>();
 
-  // Build all individual modules (with port metadata for wiring)
-  const built: { filename: string; id: string; spec: PatchSpec; ports: PortInfo[]; pdText: string }[] = [];
+  // Build all individual modules — always use buildTemplateWithPorts
+  // for consistent behavior (ports + parameters needed for wiring/controller)
+  const built: {
+    filename: string;
+    id: string;
+    spec: PatchSpec;
+    ports: PortInfo[];
+    parameters: ParameterDescriptor[];
+    pdText: string;
+  }[] = [];
+
   for (let i = 0; i < modules.length; i++) {
     const mod = modules[i];
-    let spec: PatchSpec;
-    let ports: PortInfo[];
     try {
-      if (wiring && wiring.length > 0) {
-        // Need port metadata for wiring
-        const rackable = buildTemplateWithPorts(mod.template, mod.params ?? {});
-        spec = rackable.spec;
-        ports = rackable.ports;
-      } else {
-        // No wiring — use standard buildTemplate (backward-compat)
-        spec = buildTemplate(mod.template, mod.params ?? {});
-        ports = [];
-      }
+      const rackable = buildTemplateWithPorts(mod.template, mod.params ?? {});
+      const pdText = buildPatch(rackable.spec);
+      const filename = ensurePdExtension(
+        mod.filename ?? autoFilename(mod.template, usedNames),
+      );
+      usedNames.add(filename);
+      const id = mod.id ?? filename.replace(/\.pd$/, "");
+      built.push({
+        filename,
+        id,
+        spec: rackable.spec,
+        ports: rackable.ports,
+        parameters: rackable.parameters ?? [],
+        pdText,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Error in module ${i + 1} ("${mod.template}"): ${msg}`);
     }
-    const pdText = buildPatch(spec);
-    const filename = ensurePdExtension(
-      mod.filename ?? autoFilename(mod.template, usedNames),
-    );
-    usedNames.add(filename);
-    const id = mod.id ?? filename.replace(/\.pd$/, "");
-    built.push({ filename, id, spec, ports, pdText });
   }
 
-  // Build combined rack patch
+  // Resolve controller mappings (if controller configured)
+  let controllerMappings: ControllerMapping[] | undefined;
+  let controllerPd: string | undefined;
+  let k2ConfigJson: string | undefined;
+  let controllerWarning = "";
+
+  if (controller) {
+    const device = getDevice(controller.device);
+    const midiChannel = controller.midiChannel ?? device.midiChannel;
+
+    // Collect modules with parameters
+    const mappableModules = built
+      .filter((b) => b.parameters.length > 0)
+      .map((b) => ({ id: b.id, parameters: b.parameters }));
+
+    if (mappableModules.length === 0) {
+      controllerWarning =
+        "\nController: No controllable parameters found in rack modules. " +
+        "Add synth, mixer, or drum-machine for controller support.\n";
+    } else {
+      controllerMappings = autoMap(
+        mappableModules,
+        device,
+        controller.mappings as CustomMapping[] | undefined,
+      );
+
+      if (controllerMappings.length > 0) {
+        // Generate controller patch
+        const controllerSpec = buildControllerPatch(controllerMappings, midiChannel);
+        controllerPd = buildPatch(controllerSpec);
+
+        // Generate K2 Deck config
+        const k2Config = generateK2DeckConfig(controllerMappings, midiChannel);
+        k2ConfigJson = JSON.stringify(k2Config, null, 2);
+      }
+    }
+  }
+
+  // Build combined rack patch (with controller mappings if present)
   const combinedPd = buildCombinedPatch(
-    built.map((b) => ({ name: b.filename.replace(/\.pd$/, ""), spec: b.spec, ports: b.ports, id: b.id })),
+    built.map((b) => ({
+      name: b.filename.replace(/\.pd$/, ""),
+      spec: b.spec,
+      ports: b.ports,
+      parameters: b.parameters,
+      id: b.id,
+    })),
     wiring,
+    controllerMappings,
   );
+
+  // Format controller mapping summary
+  let controllerInfo = controllerWarning;
+  if (controllerMappings && controllerMappings.length > 0) {
+    const lines = controllerMappings.map(
+      (m) => `  ${m.control.name} (CC${m.control.cc}) → ${m.moduleId}.${m.parameter.name}`,
+    );
+    controllerInfo =
+      `\nController: ${controllerMappings.length} mapping(s):\n${lines.join("\n")}\n`;
+  }
 
   // Write files if outputDir provided
   if (outputDir) {
@@ -229,16 +317,28 @@ export async function executeCreateRack(
       writeFile(join(dir, b.filename), b.pdText, "utf-8"),
     );
     writePromises.push(writeFile(join(dir, "_rack.pd"), combinedPd, "utf-8"));
+    if (controllerPd) {
+      writePromises.push(writeFile(join(dir, "_controller.pd"), controllerPd, "utf-8"));
+    }
+    if (k2ConfigJson) {
+      writePromises.push(writeFile(join(dir, "_k2_config.json"), k2ConfigJson, "utf-8"));
+    }
     await Promise.all(writePromises);
 
     const fileList = built.map((b) => `  - ${b.filename}`).join("\n");
     const wiringInfo = wiring && wiring.length > 0
       ? `\nWiring: ${wiring.length} connection(s) applied to _rack.pd.\n`
       : "";
+    const extraFiles = [
+      "  - _rack.pd (combined)",
+      controllerPd ? "  - _controller.pd (MIDI controller)" : "",
+      k2ConfigJson ? "  - _k2_config.json (K2 Deck config)" : "",
+    ].filter(Boolean).join("\n");
+
     return (
       `Rack generated successfully! ${built.length} modules + 1 combined patch.\n` +
-      `Written to: ${dir}\n${wiringInfo}\n` +
-      `Individual files:\n${fileList}\n  - _rack.pd (combined)\n\n` +
+      `Written to: ${dir}\n${wiringInfo}${controllerInfo}\n` +
+      `Individual files:\n${fileList}\n${extraFiles}\n\n` +
       `The combined _rack.pd content is below. Present it to the user — no additional file operations needed.\n\n` +
       `\`\`\`pd\n${combinedPd}\`\`\``
     );
@@ -256,10 +356,15 @@ export async function executeCreateRack(
     ? `\nWiring: ${wiring.length} connection(s) applied to _rack.pd.\n`
     : "";
 
+  let controllerSection = "";
+  if (controllerPd) {
+    controllerSection = `\n\n--- _controller.pd ---\n\`\`\`pd\n${controllerPd}\`\`\``;
+  }
+
   return (
-    `Rack generated successfully! ${built.length} modules + 1 combined patch.\n${wiringInfo}\n` +
+    `Rack generated successfully! ${built.length} modules + 1 combined patch.\n${wiringInfo}${controllerInfo}\n` +
     `Individual modules:\n\n${sections}\n\n` +
-    `--- _rack.pd (combined) ---\n\`\`\`pd\n${combinedPd}\`\`\`\n\n` +
+    `--- _rack.pd (combined) ---\n\`\`\`pd\n${combinedPd}\`\`\`${controllerSection}\n\n` +
     `The user can save these as .pd files and open them in Pure Data.`
   );
 }

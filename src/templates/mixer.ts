@@ -6,7 +6,7 @@
  */
 
 import type { PatchNodeSpec, PatchConnectionSpec } from "../core/serializer.js";
-import type { RackableSpec, PortInfo } from "./port-info.js";
+import type { RackableSpec, PortInfo, ParameterDescriptor } from "./port-info.js";
 import { validateMixerParams } from "./validate-params.js";
 
 export interface MixerParams {
@@ -146,5 +146,22 @@ export function buildMixer(params: MixerParams = {}): RackableSpec {
     ioNodeIndex: dacIdx,
   });
 
-  return { spec: { title: undefined, nodes, connections }, ports };
+  // ─── Parameters (controller integration) ─────────
+  const parameters: ParameterDescriptor[] = [];
+  for (let ch = 0; ch < channels; ch++) {
+    parameters.push({
+      name: `volume_ch${ch + 1}`,
+      label: `Channel ${ch + 1} Volume`,
+      min: 0,
+      max: 1,
+      default: 0.8,
+      unit: "",
+      curve: "linear",
+      nodeIndex: channelStartIdx + ch * NODES_PER_CH + 3, // floatatom
+      inlet: 0,
+      category: "amplitude",
+    });
+  }
+
+  return { spec: { title: undefined, nodes, connections }, ports, parameters };
 }

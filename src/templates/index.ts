@@ -16,7 +16,7 @@ import { buildTuringMachine, type TuringMachineParams } from "./turing-machine.j
 import { buildGranular, type GranularParams } from "./granular.js";
 
 export type { RackableSpec } from "./port-info.js";
-export type { PortInfo, SignalType, PortDirection } from "./port-info.js";
+export type { PortInfo, SignalType, PortDirection, ParameterDescriptor, ParameterCategory } from "./port-info.js";
 
 export type TemplateName =
   | "synth"

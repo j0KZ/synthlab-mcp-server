@@ -225,15 +225,19 @@ server.tool(
     "Takes an array of module specs (template + params) and generates: " +
     "individual .pd files for each module + a combined _rack.pd with all modules side-by-side. " +
     "Use wiring to connect modules via throw~/catch~ (audio) or send/receive (control) buses. " +
+    "Add controller config to map a MIDI controller (e.g. K2) to rack parameters — " +
+    "generates _controller.pd (MIDI routing) and _k2_config.json (LED feedback). " +
+    "Parameters auto-map by category (faders→volume, pots→filter) or use custom mappings. " +
     "If outputDir is provided, files are written to that directory automatically. " +
     "IMPORTANT: The complete .pd content is ALWAYS returned in the response. " +
     "Do NOT run any file operations (ls, cp, mv, cat) after this tool — files are already written and content is already in the response.",
   createRackSchema,
-  async ({ modules, wiring, outputDir }) => {
+  async ({ modules, wiring, controller, outputDir }) => {
     try {
       const result = await executeCreateRack({
         modules: modules as RackModuleSpec[],
         wiring: wiring as { from: string; output: string; to: string; input: string }[] | undefined,
+        controller: controller as { device: string; midiChannel?: number; mappings?: { control: string; module: string; parameter: string }[] } | undefined,
         outputDir,
       });
       return { content: [{ type: "text", text: result }] };
