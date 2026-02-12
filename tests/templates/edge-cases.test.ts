@@ -52,12 +52,60 @@ describe("boolean coercion for enum params", () => {
 });
 
 // ──────────────────────────────────────────────
+// Alias coercion (LLMs send full names)
+// ──────────────────────────────────────────────
+
+describe("waveform/filter/envelope alias coercion", () => {
+  it("coerces 'sawtooth' → 'saw'", () => {
+    const spec = buildSynth({ waveform: "sawtooth" as any });
+    const pd = buildPatch(spec.spec);
+    expect(pd).toContain("phasor~"); // saw uses phasor~
+  });
+
+  it("coerces 'triangle' → 'saw'", () => {
+    const spec = buildSynth({ waveform: "triangle" as any });
+    const pd = buildPatch(spec.spec);
+    expect(pd).toContain("phasor~");
+  });
+
+  it("coerces 'low-pass' → 'lowpass'", () => {
+    const spec = buildSynth({ filter: "low-pass" as any });
+    const pd = buildPatch(spec.spec);
+    expect(pd).toContain("lop~");
+  });
+
+  it("coerces 'high-pass' → 'highpass'", () => {
+    const spec = buildSynth({ filter: "high-pass" as any });
+    const pd = buildPatch(spec.spec);
+    expect(pd).toContain("hip~");
+  });
+
+  it("coerces 'band-pass' → 'bandpass'", () => {
+    const spec = buildSynth({ filter: "band-pass" as any });
+    const pd = buildPatch(spec.spec);
+    expect(pd).toContain("bp~");
+  });
+
+  it("handles case insensitivity ('Sawtooth' → 'saw')", () => {
+    const spec = buildSynth({ waveform: "Sawtooth" as any });
+    const pd = buildPatch(spec.spec);
+    expect(pd).toContain("phasor~");
+  });
+
+  it("handles case insensitivity ('LOWPASS' → 'lowpass')", () => {
+    const spec = buildSynth({ filter: "LOWPASS" as any });
+    const pd = buildPatch(spec.spec);
+    expect(pd).toContain("lop~");
+  });
+});
+
+// ──────────────────────────────────────────────
 // Synth validation
 // ──────────────────────────────────────────────
 
 describe("synth param validation", () => {
   it("rejects invalid waveform", () => {
-    expect(() => buildSynth({ waveform: "triangle" as any })).toThrow(/Invalid waveform/);
+    expect(() => buildSynth({ waveform: "wobble" as any })).toThrow(/Invalid waveform/);
   });
 
   it("rejects invalid filter", () => {

@@ -7,6 +7,22 @@ const VALID_WAVEFORMS = new Set(["sine", "saw", "square", "noise"]);
 const VALID_FILTERS = new Set(["lowpass", "highpass", "bandpass", "moog", "korg"]);
 const VALID_ENVELOPES = new Set(["adsr", "ar", "decay", "none"]);
 const VALID_REVERB_VARIANTS = new Set(["schroeder", "simple"]);
+
+/** Common aliases → canonical names. LLMs often use full names instead of Pd abbreviations. */
+const WAVEFORM_ALIASES: Record<string, string> = {
+  sawtooth: "saw", triangle: "saw", tri: "saw",
+  sin: "sine", sinewave: "sine",
+  sq: "square", pulse: "square",
+  white: "noise",
+};
+const FILTER_ALIASES: Record<string, string> = {
+  lp: "lowpass", "low-pass": "lowpass", low_pass: "lowpass",
+  hp: "highpass", "high-pass": "highpass", high_pass: "highpass",
+  bp: "bandpass", "band-pass": "bandpass", band_pass: "bandpass",
+};
+const ENVELOPE_ALIASES: Record<string, string> = {
+  adr: "adsr", "ad": "ar",
+};
 const VALID_DRUM_VOICES = new Set(["bd", "sn", "hh", "cp"]);
 const VALID_OUTPUT_RANGES = new Set(["unipolar", "bipolar"]);
 
@@ -15,6 +31,24 @@ export function validateSynthParams(params: Record<string, unknown>): void {
   if (typeof params.waveform === "boolean") params.waveform = params.waveform ? "sine" : undefined;
   if (typeof params.filter === "boolean") params.filter = params.filter ? "lowpass" : undefined;
   if (typeof params.envelope === "boolean") params.envelope = params.envelope ? "adsr" : "none";
+
+  // Resolve common aliases (LLMs send "sawtooth" instead of "saw", etc.)
+  if (typeof params.waveform === "string") {
+    const key = params.waveform.toLowerCase();
+    if (WAVEFORM_ALIASES[key]) params.waveform = WAVEFORM_ALIASES[key];
+    else if (!VALID_WAVEFORMS.has(key) && VALID_WAVEFORMS.has(params.waveform)) { /* already valid */ }
+    else params.waveform = key; // normalize case
+  }
+  if (typeof params.filter === "string") {
+    const key = params.filter.toLowerCase();
+    if (FILTER_ALIASES[key]) params.filter = FILTER_ALIASES[key];
+    else params.filter = key;
+  }
+  if (typeof params.envelope === "string") {
+    const key = params.envelope.toLowerCase();
+    if (ENVELOPE_ALIASES[key]) params.envelope = ENVELOPE_ALIASES[key];
+    else params.envelope = key;
+  }
 
   if (params.waveform !== undefined && !VALID_WAVEFORMS.has(String(params.waveform))) {
     throw new Error(`Invalid waveform "${params.waveform}". Valid: ${[...VALID_WAVEFORMS].join(", ")}`);

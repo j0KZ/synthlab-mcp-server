@@ -15,17 +15,18 @@ export const createFromTemplateSchema = {
     .optional()
     .describe(
       "Template-specific parameters as a JSON object. " +
-        "Synth: { waveform, filter, frequency, cutoff, amplitude, envelope }. " +
-        "Sequencer: { steps, bpm, notes, midiChannel, velocity }. " +
-        "Reverb: { variant, roomSize, damping, wetDry }. " +
-        "Mixer: { channels, stereo }. " +
-        "Drum-machine: { voices, tune, decay, tone, amplitude }. " +
-        "Clock: { bpm, divisions }. " +
-        "Chaos: { outputs, speed, r }. " +
-        "Maths: { channels, rise, fall, cycle, outputRange }. " +
-        "Turing-machine: { length, probability, bpm, range, offset }. " +
-        "Granular: { grains, grainSize, pitch, position, freeze, wetDry }. " +
-        "Bridge: { protocol, port, routes }.",
+        "Synth: { waveform: sine|saw|square|noise, filter: lowpass|highpass|bandpass|moog|korg, " +
+        "frequency: Hz, cutoff: Hz, amplitude: 0-1, envelope: adsr|ar|decay|none }. " +
+        "Sequencer: { steps: 1-64, bpm, notes: [MIDI 0-127], midiChannel: 1-16, velocity: 0-127 }. " +
+        "Reverb: { variant: schroeder|simple, roomSize: 0-1, damping: 0-1, wetDry: 0-1 }. " +
+        "Mixer: { channels: 1-16, stereo: bool }. " +
+        "Drum-machine: { voices: [bd,sn,hh,cp], tune: 0-1, decay: 0-1, tone: 0-1, amplitude: 0-1 }. " +
+        "Clock: { bpm, divisions: [1,2,4,8] }. " +
+        "Chaos: { outputs: 1-3, speed: 0-1, r: 3.5-4.0 }. " +
+        "Maths: { channels: 1-2, rise: ms, fall: ms, cycle: bool, outputRange: unipolar|bipolar }. " +
+        "Turing-machine: { length: 2-16, probability: 0-1, bpm, range: 1-127, offset: 0-127 }. " +
+        "Granular: { grains: 1-4, grainSize: 10-500, pitch: 0.25-4.0, position: 0-1, freeze: bool, wetDry: 0-1 }. " +
+        "Bridge: { protocol: osc|fudi, port: 1-65535, routes: [string] }.",
     ),
   outputPath: z
     .string()
