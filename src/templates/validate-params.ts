@@ -246,3 +246,31 @@ export function validateGranularParams(params: Record<string, unknown>): void {
     if (!Number.isFinite(w) || w < 0 || w > 1) throw new Error(`wetDry must be 0-1, got ${params.wetDry}`);
   }
 }
+
+const VALID_PROTOCOLS = new Set(["osc", "fudi"]);
+
+export function validateBridgeParams(params: Record<string, unknown>): void {
+  if (typeof params.protocol === "boolean") params.protocol = "osc";
+
+  if (params.protocol !== undefined && !VALID_PROTOCOLS.has(String(params.protocol))) {
+    throw new Error(`Invalid protocol "${params.protocol}". Valid: osc, fudi`);
+  }
+  if (params.port !== undefined) {
+    const p = Number(params.port);
+    if (!Number.isInteger(p) || p < 1 || p > 65535) throw new Error(`port must be 1-65535, got ${params.port}`);
+  }
+  if (params.routes !== undefined) {
+    if (Array.isArray(params.routes) && params.routes.length === 0) {
+      params.routes = undefined;
+      return;
+    }
+    if (!Array.isArray(params.routes)) {
+      throw new Error("routes must be an array of strings");
+    }
+    for (const r of params.routes) {
+      if (typeof r !== "string" || r.length === 0) {
+        throw new Error(`Each route must be a non-empty string, got "${r}"`);
+      }
+    }
+  }
+}

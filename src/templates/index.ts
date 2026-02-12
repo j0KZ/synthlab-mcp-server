@@ -14,6 +14,7 @@ import { buildChaos, type ChaosParams } from "./chaos.js";
 import { buildMaths, type MathsParams } from "./maths.js";
 import { buildTuringMachine, type TuringMachineParams } from "./turing-machine.js";
 import { buildGranular, type GranularParams } from "./granular.js";
+import { buildBridge, type BridgeParams } from "./bridge.js";
 
 export type { RackableSpec } from "./port-info.js";
 export type { PortInfo, SignalType, PortDirection, ParameterDescriptor, ParameterCategory } from "./port-info.js";
@@ -28,7 +29,8 @@ export type TemplateName =
   | "chaos"
   | "maths"
   | "turing-machine"
-  | "granular";
+  | "granular"
+  | "bridge";
 
 export const TEMPLATE_NAMES: TemplateName[] = [
   "synth",
@@ -41,6 +43,7 @@ export const TEMPLATE_NAMES: TemplateName[] = [
   "maths",
   "turing-machine",
   "granular",
+  "bridge",
 ];
 
 export type TemplateParams =
@@ -53,7 +56,8 @@ export type TemplateParams =
   | ChaosParams
   | MathsParams
   | TuringMachineParams
-  | GranularParams;
+  | GranularParams
+  | BridgeParams;
 
 /**
  * Build a RackableSpec (PatchSpec + ports) from a named template and params.
@@ -81,6 +85,8 @@ export function buildTemplateWithPorts(name: string, params: Record<string, unkn
       return buildTuringMachine(params as TuringMachineParams);
     case "granular":
       return buildGranular(params as GranularParams);
+    case "bridge":
+      return buildBridge(params as BridgeParams);
     default:
       throw new Error(
         `Unknown template "${name}". Available templates: ${TEMPLATE_NAMES.join(", ")}`,

@@ -490,6 +490,7 @@ describe("template registry", () => {
       "maths",
       "turing-machine",
       "granular",
+      "bridge",
     ]);
   });
 

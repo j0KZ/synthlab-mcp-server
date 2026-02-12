@@ -8,7 +8,7 @@ export const createFromTemplateSchema = {
   template: z
     .string()
     .describe(
-      'Template name: "synth", "sequencer", "reverb", "mixer", "drum-machine", "clock", "chaos", "maths", "turing-machine", or "granular".',
+      'Template name: "synth", "sequencer", "reverb", "mixer", "drum-machine", "clock", "chaos", "maths", "turing-machine", "granular", or "bridge".',
     ),
   params: z
     .record(z.unknown())
@@ -24,7 +24,8 @@ export const createFromTemplateSchema = {
         "Chaos: { outputs, speed, r }. " +
         "Maths: { channels, rise, fall, cycle, outputRange }. " +
         "Turing-machine: { length, probability, bpm, range, offset }. " +
-        "Granular: { grains, grainSize, pitch, position, freeze, wetDry }.",
+        "Granular: { grains, grainSize, pitch, position, freeze, wetDry }. " +
+        "Bridge: { protocol, port, routes }.",
     ),
   outputPath: z
     .string()

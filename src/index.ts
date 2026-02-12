@@ -18,6 +18,8 @@ import { executeCreateFromTemplate } from "./tools/template.js";
 import { createFromTemplateSchema } from "./schemas/template.js";
 import { executeCreateRack, type RackModuleSpec } from "./tools/rack.js";
 import { createRackSchema } from "./schemas/rack.js";
+import { executeSendMessage } from "./tools/control.js";
+import { sendMessageSchema } from "./schemas/control.js";
 
 const server = new McpServer({
   name: "puredata-mcp-server",
@@ -192,7 +194,7 @@ server.tool(
 server.tool(
   "create_from_template",
   "Generate a Pd patch from a parameterized template. " +
-    "Available: synth, sequencer, reverb, mixer, drum-machine, clock, chaos, maths, turing-machine, granular. " +
+    "Available: synth, sequencer, reverb, mixer, drum-machine, clock, chaos, maths, turing-machine, granular, bridge. " +
     "Each template accepts specific params (e.g. synth: waveform, filter; sequencer: steps, bpm; drum-machine: voices, tune). " +
     "The complete .pd file content is ALWAYS returned in the response — present it directly to the user. " +
     "Do NOT attempt additional file operations after calling this tool.",
@@ -245,6 +247,33 @@ server.tool(
       const msg = error instanceof Error ? error.message : String(error);
       return {
         content: [{ type: "text", text: `Error creating rack: ${msg}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tool: send_message
+// ---------------------------------------------------------------------------
+
+server.tool(
+  "send_message",
+  "Send a control message to a running Pure Data instance via OSC (UDP) or FUDI (TCP). " +
+    "Requires a bridge patch loaded in Pd — use create_from_template with template 'bridge' to generate one. " +
+    "Common addresses: /pd/tempo <bpm>, /pd/note <note> <velocity> <channel>, " +
+    "/pd/cc <cc#> <value> <channel>, /pd/bang, /pd/param/<name> <value>. " +
+    "The confirmation is ALWAYS returned in the response. " +
+    "Do NOT attempt additional file operations after calling this tool.",
+  sendMessageSchema,
+  async ({ protocol, host, port, address, args }) => {
+    try {
+      const result = await executeSendMessage({ protocol, host, port, address, args });
+      return { content: [{ type: "text", text: result }] };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: `Error sending message: ${msg}` }],
         isError: true,
       };
     }
