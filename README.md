@@ -5,13 +5,13 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-blueviolet)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-580%2F580-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-615%2F615-brightgreen)]()
 
 ---
 
 ## What is this?
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives AI assistants deep understanding of [Pure Data](https://puredata.info/) and [VCV Rack](https://vcvrack.com/) patches. 10 tools + 1 prompt, 611 tests, zero runtime dependencies beyond MCP SDK + Zod.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives AI assistants deep understanding of [Pure Data](https://puredata.info/) and [VCV Rack](https://vcvrack.com/) patches. 10 tools + 1 prompt, 615 tests, zero runtime dependencies beyond MCP SDK + Zod.
 
 **Pure Data** — compose full songs from genre descriptions, parse `.pd` files into typed ASTs, generate patches from specs, analyze signal flow, template 11 instruments, assemble multi-module racks with inter-module wiring, map MIDI hardware, send OSC/FUDI in real time.
 
@@ -131,7 +131,7 @@ Modular two-tier system: **modules** (oscillator, filter, VCA, envelope, delay, 
 |----------|----------------|----------------|
 | `synth` | Oscillator + Filter + VCA | `waveform`, `filter`, `envelope`, `frequency`, `cutoff`, `amplitude` |
 | `sequencer` | Step sequencer | `steps`, `bpm`, `notes`, `midiChannel`, `velocity` |
-| `drum-machine` | Analog drums | `voices` (bd/sn/hh/cp), `tune`, `decay`, `tone` |
+| `drum-machine` | Analog drums (3-layer) | `voices` (bd/sn/hh/cp), `tune`, `decay`, `tone`, per-voice volume |
 | `reverb` | Spring/plate reverb | `variant` (schroeder/simple), `roomSize`, `damping`, `wetDry` |
 | `mixer` | Mixer module | `channels` (1-16), per-channel mute gates |
 | `clock` | Master clock | `bpm`, `divisions` (e.g. [1,2,4,8]) |
@@ -502,7 +502,7 @@ src/                            # ~9,500 lines (+ 42,800 registry data)
     validate-params.ts          # Runtime param validation
     synth.ts                    # Oscillator -> filter -> VCA -> dac~
     sequencer.ts                # MIDI step sequencer
-    drum-machine.ts             # 4 analog drum voices (BD/SN/HH/CP)
+    drum-machine.ts             # 4 analog drum voices — 3-layer (voices/filter/mix)
     reverb-template.ts          # adc~ -> reverb -> wet/dry -> dac~
     mixer.ts                    # N-channel mixer with mute gates
     clock.ts                    # Master clock with divided outputs
@@ -574,7 +574,7 @@ scripts/                        # ~700 lines
   parse-svg-width.ts            # SVG panel width -> HP conversion
   update-readme-stats.ts        # Auto-update README tool/test counts
 
-tests/                          # 611 tests, ~6,500 lines
+tests/                          # 615 tests, ~6,500 lines
   parser.test.ts                # 14 — parsing, subpatches, arrays, edge cases
   serializer.test.ts            # 8 — round-trip, spec builder, escaping
   object-registry.test.ts       # 37 — port counts, aliases, variable objects
@@ -587,7 +587,7 @@ tests/                          # 611 tests, ~6,500 lines
   templates/
     compose.test.ts             # 8 — module composition, wiring, autoLayout
     modules.test.ts             # 17 — all module variants
-    templates.test.ts           # 38 — complete template round-trips
+    templates.test.ts           # 42 — complete template round-trips
     edge-cases.test.ts          # 106 — param validation, coercion, boundaries
     bridge.test.ts              # 3 — OSC/FUDI bridge variants
   network/
@@ -629,7 +629,7 @@ tests/                          # 611 tests, ~6,500 lines
 ```bash
 npm run build        # Compile with tsup (ESM + declarations)
 npm run dev          # Watch mode
-npm run test         # Run vitest (611 tests)
+npm run test         # Run vitest (615 tests)
 npm run lint         # Type-check with tsc --noEmit
 npm run inspect      # Test server with MCP Inspector
 ```
@@ -656,7 +656,7 @@ npm run update-stats         # Patches README with actual tool + test counts
 | **TypeScript** (strict mode) | Type-safe parser and serializer |
 | **MCP SDK** (`@modelcontextprotocol/sdk`) | Protocol implementation |
 | **Zod** | Runtime input validation |
-| **Vitest** | Test runner (611 tests) |
+| **Vitest** | Test runner (615 tests) |
 | **tsup** | Bundler (ESM output, 1.04 MB) |
 | **tsx** | TypeScript execution for build scripts |
 | **Zero runtime deps** beyond MCP SDK + Zod | OSC via `dgram`, FUDI via `net` |
@@ -665,7 +665,7 @@ npm run update-stats         # Patches README with actual tool + test counts
 
 ## Roadmap
 
-All phases complete.
+All phases complete. Recent improvements:
 
 1. **Core** — Parser + serializer + MCP scaffold
 2. **Analysis** — Object registry, signal flow graph, DSP chain detection, complexity scoring
@@ -676,6 +676,7 @@ All phases complete.
 7. **Live Control** — OSC/FUDI messaging (`send_message` tool + `bridge` template)
 8. **VCV Rack** — `.vcv` generation with 15-plugin registry (~500 modules), module discovery + aliases
 9. **Song Composer** — `compose_patch` tool + `song_analysis` Socratic prompt
+10. **Drum Machine v2** — 3-layer architecture (voices/filter/mix), sub-bass kick, bob~ warmth, metallic hi-hat, 808-style clap, per-voice volume control
 
 ---
 
