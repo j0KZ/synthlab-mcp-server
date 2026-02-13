@@ -322,16 +322,6 @@ export const prismRegistry: VcvPluginRegistry = {
                 "id": 21,
                 "name": "MONO_LEVEL_INPUT",
                 "label": "Mono Level"
-          },
-          {
-                "id": 27,
-                "name": "ifdefinedMETAMODULEENUMSMONO_CHAN_INPUT6",
-                "label": "Ifdefinedmetamoduleenumsmono Chan Input6"
-          },
-          {
-                "id": 28,
-                "name": "endifNUM_INPUTS",
-                "label": "Endifnum Inputs"
           }
     ],
       outputs: [
@@ -364,16 +354,6 @@ export const prismRegistry: VcvPluginRegistry = {
                 "id": 10,
                 "name": "MONO_VOCT_OUTPUT",
                 "label": "Mono Voct"
-          },
-          {
-                "id": 16,
-                "name": "ifdefinedMETAMODULEENUMSMONO_CHAN_OUTPUT6",
-                "label": "Ifdefinedmetamoduleenumsmono Chan Output6"
-          },
-          {
-                "id": 17,
-                "name": "endifNUM_OUTPUTS",
-                "label": "Endifnum Outputs"
           }
     ],
     },

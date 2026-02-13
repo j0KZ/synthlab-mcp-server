@@ -12,11 +12,11 @@
 
 ## What is this?
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that turns Claude into a full synthesis workstation. 10 tools + 1 prompt, 619 tests, zero runtime dependencies beyond MCP SDK + Zod.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that turns Claude into a full synthesis workstation. 10 tools + 1 prompt, 642 tests, zero runtime dependencies beyond MCP SDK + Zod.
 
 **Pure Data** — compose full songs from genre descriptions, parse `.pd` files into typed ASTs, generate patches from specs, analyze signal flow, template 11 instruments, assemble multi-module racks with inter-module wiring, send OSC/FUDI in real time.
 
-**VCV Rack** — generate `.vcv` patch files from module + cable specs, with a registry of 15 plugins (~400 modules) auto-scraped from C++ source.
+**VCV Rack** — generate `.vcv` patch files from module + cable specs, with a registry of 19 plugins (~600 modules) auto-scraped from C++ source.
 
 **MIDI Controllers** — auto-map hardware controls (Korg nanoKONTROL2, Arturia MicroFreak, Roland TR-8S) to rack parameters with absolute, relative, and trigger modes.
 
@@ -71,7 +71,7 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that 
 |                                                                    |
 |  +---------------------------------------------------------------+ |
 |  |            VCV Rack Generator                                 | |
-|  |  15-plugin registry (~400 modules) from C++ source scraping   | |
+|  |  19-plugin registry (~600 modules) from C++ source scraping   | |
 |  |  Fuzzy port/param resolution | HP positioning | Cable wiring  | |
 |  +---------------------------------------------------------------+ |
 |                                                                    |
@@ -278,19 +278,23 @@ Use the `bridge` template to generate the Pd-side receiver patch:
 
 Generates VCV Rack v2 patch files (plain JSON `.vcv` format) from module + cable specifications.
 
-**15 plugin registries** (~400 modules) with port/param IDs scraped from C++ source:
+**19 plugin registries** (~600 modules) with port/param IDs scraped from C++ source:
 
 | Plugin | Modules | Source |
 |--------|---------|--------|
 | **Core** | 9 | AudioInterface2, MIDIToCVInterface, CV-MIDI, Notes, etc. |
 | **Fundamental** | 35 | VCO, VCF, VCA, LFO, ADSR, Mixer, SEQ-3, Scope, etc. |
 | **Bogaudio** | 111 | VCO, VCF, ADSR, Mix8, FMOp, Noise, etc. |
-| **CountModula** | 50+ | Sequencers, gates, logic, quantizers |
+| **CountModula** | 104 | Sequencers, gates, logic, quantizers |
 | **AudibleInstruments** | 20 | Mutable Instruments clones (Braids, Clouds, Rings, etc.) |
-| **ImpromptuModular** | 30+ | Clocked, Foundry, Phrase-Seq, etc. |
+| **ImpromptuModular** | 29 | Clocked, Foundry, Phrase-Seq, etc. |
+| **FrozenWasteland** | 49 | QAR (Euclidean), ProbablyNote, Portland Weather, etc. |
+| **SubmarineFree** | 65 | Logic gates, comparators, digital utilities |
+| **JW-Modules** | 36 | GridSeq, NoteSeq, Patterns, generative sequencers |
 | **Befaco** | 32 | EvenVCO, Mixer, Slew, SpringReverb, etc. |
-| **Valley** | 9 | Plateau, Dexter, Amalgam, etc. |
+| **Valley** | 8 | Plateau, Dexter, Amalgam, etc. |
 | **Stoermelder PackOne** | 42 | STRIP, MIDI-CAT, 8FACE, etc. |
+| **ZZC** | 10 | Phaseque, Clock, Divider, FN-3, SH-8 |
 | + 6 more | ~60 | ML Modules, Prism, GlueTheGiant, OrangeLine, StudioSixPlusOne, VCV Recorder |
 
 **Features:**
@@ -476,7 +480,7 @@ Generate a VCV Rack `.vcv` patch file from module and cable specifications.
 | `cables` | `array?` | Cable connections: `{ from: {module, port}, to: {module, port}, color? }` |
 | `outputPath` | `string?` | Write `.vcv` file (optional) |
 
-Supports 15 plugins with aliases: `"vcv"` → Fundamental, `"mi"` → AudibleInstruments, `"bg"` → Bogaudio, `"stoermelder"` → PackOne, etc.
+Supports 19 plugins with aliases: `"vcv"` → Fundamental, `"mi"` → AudibleInstruments, `"bg"` → Bogaudio, `"fw"` → FrozenWasteland, `"jw"` → JW-Modules, `"sub"` → SubmarineFree, etc.
 
 ### MCP Prompts
 
@@ -590,7 +594,7 @@ scripts/                        # ~700 lines
   parse-svg-width.ts            # SVG panel width -> HP conversion
   update-readme-stats.ts        # Auto-update README tool/test counts
 
-tests/                          # 619 tests, ~6,500 lines
+tests/                          # 642 tests, ~6,500 lines
   parser.test.ts                # 14 — parsing, subpatches, arrays, edge cases
   serializer.test.ts            # 8 — round-trip, spec builder, escaping
   object-registry.test.ts       # 37 — port counts, aliases, variable objects
@@ -621,11 +625,11 @@ tests/                          # 619 tests, ~6,500 lines
     resolve-source.test.ts      # 5 — raw text vs file path resolution
   vcv/
     generator.test.ts           # 15 — modules, cables, positions, errors
-    registry.test.ts            # 53 — 15 plugins, module aliases, fuzzy resolution, formatting
+    registry.test.ts            # 71 — 19 plugins, module aliases, fuzzy resolution, formatting
     positioner.test.ts          # 5 — HP layout, adjacency chain
     validate-vcv-params.test.ts # 8 — coercion, empty arrays, booleans
   scripts/
-    parse-cpp-enums.test.ts     # 25 — enums, ENUMS macro, removed, labels
+    parse-cpp-enums.test.ts     # 30 — enums, ENUMS macro, removed, labels, preprocessor, expressions
     parse-svg-width.test.ts     # 4 — mm/px to HP conversion
   wiring/
     bus-injector.test.ts        # 17 — connection helpers, validation
@@ -645,7 +649,7 @@ tests/                          # 619 tests, ~6,500 lines
 ```bash
 npm run build        # Compile with tsup (ESM + declarations)
 npm run dev          # Watch mode
-npm run test         # Run vitest (619 tests)
+npm run test         # Run vitest (642 tests)
 npm run lint         # Type-check with tsc --noEmit
 npm run inspect      # Test server with MCP Inspector
 ```
@@ -672,7 +676,7 @@ npm run update-stats         # Patches README with actual tool + test counts
 | **TypeScript** (strict mode) | Type-safe parser and serializer |
 | **MCP SDK** (`@modelcontextprotocol/sdk`) | Protocol implementation |
 | **Zod** | Runtime input validation |
-| **Vitest** | Test runner (619 tests) |
+| **Vitest** | Test runner (642 tests) |
 | **tsup** | Bundler (ESM output, 1.04 MB) |
 | **tsx** | TypeScript execution for build scripts |
 | **Zero runtime deps** beyond MCP SDK + Zod | OSC via `dgram`, FUDI via `net` |
@@ -690,7 +694,7 @@ All phases complete. Recent improvements:
 5. **Wiring** — Inter-module buses (throw~/catch~, send/receive, clock sync)
 6. **MIDI Controllers** — K2, MicroFreak, TR-8S profiles with auto-mapping
 7. **Live Control** — OSC/FUDI messaging (`send_message` tool + `bridge` template)
-8. **VCV Rack** — `.vcv` generation with 15-plugin registry (~500 modules), module discovery + aliases
+8. **VCV Rack** — `.vcv` generation with 19-plugin registry (~600 modules), module discovery + aliases
 9. **Song Composer** — `compose_patch` tool + `song_analysis` Socratic prompt
 10. **Drum Machine v2** — 3-layer architecture (voices/filter/mix), sub-bass kick, bob~ warmth, metallic hi-hat, 808-style clap, per-voice volume control
 

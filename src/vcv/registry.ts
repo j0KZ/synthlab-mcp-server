@@ -27,6 +27,13 @@ const PLUGIN_ALIASES: Record<string, string> = {
   gtg: "gluethegiant",
   glue: "gluethegiant",
   s6: "studiosixplusone",
+  fw: "frozenwasteland",
+  frozen: "frozenwasteland",
+  "frozen wasteland": "frozenwasteland",
+  jw: "jw-modules",
+  "jw modules": "jw-modules",
+  submarine: "submarinefree",
+  sub: "submarinefree",
 };
 
 /**
@@ -77,6 +84,22 @@ const MODULE_ALIASES: Record<string, { plugin: string; model: string }> = {
   "fundamental:vcf-1": { plugin: "fundamental", model: "VCF" },
   "fundamental:vcf_1": { plugin: "fundamental", model: "VCF" },
   "fundamental:vcf1": { plugin: "fundamental", model: "VCF" },
+  // FrozenWasteland — QAR (Quad Algorithmic Rhythm) Euclidean sequencer
+  "frozenwasteland:qar": { plugin: "frozenwasteland", model: "QuadAlgorithmicRhythm" },
+  "frozenwasteland:euclidean": { plugin: "frozenwasteland", model: "QuadAlgorithmicRhythm" },
+  "frozenwasteland:probably_note": { plugin: "frozenwasteland", model: "ProbablyNote" },
+  "frozenwasteland:portland_weather": { plugin: "frozenwasteland", model: "PortlandWeather" },
+  // ZZC — hyphenated names
+  "zzc:fn3": { plugin: "zzc", model: "FN-3" },
+  "zzc:fn_3": { plugin: "zzc", model: "FN-3" },
+  "zzc:sh8": { plugin: "zzc", model: "SH-8" },
+  "zzc:sh_8": { plugin: "zzc", model: "SH-8" },
+  // JW-Modules — common LLM guesses
+  "jw-modules:gridseq": { plugin: "jw-modules", model: "GridSeq" },
+  "jw-modules:grid_seq": { plugin: "jw-modules", model: "GridSeq" },
+  "jw-modules:noteseq": { plugin: "jw-modules", model: "NoteSeq" },
+  "jw-modules:note_seq": { plugin: "jw-modules", model: "NoteSeq" },
+  "jw-modules:noteseq16": { plugin: "jw-modules", model: "NoteSeq16" },
 };
 
 /**

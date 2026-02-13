@@ -395,3 +395,96 @@ describe("enumNameToLabel", () => {
     expect(enumNameToLabel("PHASE_LIGHT")).toBe("Phase");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Preprocessor directive stripping
+// ---------------------------------------------------------------------------
+
+describe("parseCppSource — preprocessor directives", () => {
+  it("strips #ifdef preprocessor directives from enum bodies", () => {
+    const src = `
+      enum InputIds {
+        MONO_Q_INPUT,
+        #ifdef METAMODULE
+        ENUMS(MONO_CHAN_INPUT, 6),
+        #endif
+        NUM_INPUTS
+      };
+    `;
+    const mod = parseCppSource(src);
+    expect(mod.inputs).toHaveLength(1);
+    expect(input(mod, "MONO_Q_INPUT")?.id).toBe(0);
+  });
+
+  it("strips nested #ifdef blocks without leaking inner content", () => {
+    const src = `
+      enum ParamIds {
+        A_PARAM,
+        #ifdef PLATFORM_X
+        B_PARAM,
+        #ifdef SUBFEATURE
+        C_PARAM,
+        #endif
+        D_PARAM,
+        #endif
+        E_PARAM,
+        NUM_PARAMS
+      };
+    `;
+    const mod = parseCppSource(src);
+    expect(mod.params).toHaveLength(2); // A and E only
+    expect(param(mod, "A_PARAM")?.id).toBe(0);
+    expect(param(mod, "E_PARAM")?.id).toBe(1);
+    expect(param(mod, "B_PARAM")).toBeUndefined();
+    expect(param(mod, "C_PARAM")).toBeUndefined();
+    expect(param(mod, "D_PARAM")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Intra-enum expression resolution
+// ---------------------------------------------------------------------------
+
+describe("parseCppSource — expression resolution", () => {
+  it("resolves MEMBER + N intra-enum references", () => {
+    const src = `
+      enum ParamIds {
+        CELL_NOTE_PARAM,
+        CELL_GATE_PARAM = CELL_NOTE_PARAM + 16,
+        RND_NOTES_PARAM = CELL_GATE_PARAM + 16,
+        NUM_PARAMS
+      };
+    `;
+    const mod = parseCppSource(src);
+    expect(param(mod, "CELL_NOTE_PARAM")?.id).toBe(0);
+    expect(param(mod, "CELL_GATE_PARAM")?.id).toBe(16);
+    expect(param(mod, "RND_NOTES_PARAM")?.id).toBe(32);
+  });
+
+  it("skips members with unresolvable expressions", () => {
+    const src = `
+      enum ParamIds {
+        A_PARAM,
+        B_PARAM = sizeof(something),
+        C_PARAM,
+        NUM_PARAMS
+      };
+    `;
+    const mod = parseCppSource(src);
+    expect(mod.params).toHaveLength(2); // A and C only
+    expect(param(mod, "A_PARAM")?.id).toBe(0);
+    expect(param(mod, "C_PARAM")?.id).toBe(1);
+  });
+
+  it("resolves MEMBER - N expressions", () => {
+    const src = `
+      enum ParamIds {
+        A_PARAM = 10,
+        B_PARAM = A_PARAM - 3,
+        NUM_PARAMS
+      };
+    `;
+    const mod = parseCppSource(src);
+    expect(param(mod, "B_PARAM")?.id).toBe(7);
+  });
+});

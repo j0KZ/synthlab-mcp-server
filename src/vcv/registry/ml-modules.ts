@@ -450,7 +450,7 @@ export const mlModulesRegistry: VcvPluginRegistry = {
                 "label": "In A"
           },
           {
-                "id": 1,
+                "id": 8,
                 "name": "IN_B_INPUT",
                 "label": "In B"
           }
@@ -486,12 +486,12 @@ export const mlModulesRegistry: VcvPluginRegistry = {
                 "label": "Gate"
           },
           {
-                "id": 2,
+                "id": 9,
                 "name": "A_INPUT",
                 "label": "A"
           },
           {
-                "id": 3,
+                "id": 17,
                 "name": "B_INPUT",
                 "label": "B"
           }
@@ -522,7 +522,7 @@ export const mlModulesRegistry: VcvPluginRegistry = {
                 "label": "In A"
           },
           {
-                "id": 1,
+                "id": 8,
                 "name": "IN_B_INPUT",
                 "label": "In B"
           }
@@ -534,7 +534,7 @@ export const mlModulesRegistry: VcvPluginRegistry = {
                 "label": "Out"
           },
           {
-                "id": 1,
+                "id": 8,
                 "name": "SUM_OUTPUT",
                 "label": "Sum"
           }
@@ -699,7 +699,7 @@ export const mlModulesRegistry: VcvPluginRegistry = {
                 "label": "In"
           },
           {
-                "id": 1,
+                "id": 8,
                 "name": "TRIG_INPUT",
                 "label": "Trig"
           }
@@ -1302,7 +1302,7 @@ export const mlModulesRegistry: VcvPluginRegistry = {
                 "label": "Trig"
           },
           {
-                "id": 1,
+                "id": 8,
                 "name": "CV_INPUT",
                 "label": "Cv"
           }
@@ -1364,17 +1364,17 @@ export const mlModulesRegistry: VcvPluginRegistry = {
                 "label": "Trig"
           },
           {
-                "id": 1,
+                "id": 8,
                 "name": "CV1_INPUT",
                 "label": "Cv1"
           },
           {
-                "id": 2,
+                "id": 16,
                 "name": "CV2_INPUT",
                 "label": "Cv2"
           },
           {
-                "id": 3,
+                "id": 24,
                 "name": "CV3_INPUT",
                 "label": "Cv3"
           }
@@ -1415,17 +1415,17 @@ export const mlModulesRegistry: VcvPluginRegistry = {
                 "label": "Trig"
           },
           {
-                "id": 1,
+                "id": 8,
                 "name": "CV1_INPUT",
                 "label": "CV1"
           },
           {
-                "id": 2,
+                "id": 9,
                 "name": "CV2_INPUT",
                 "label": "CV2"
           },
           {
-                "id": 3,
+                "id": 10,
                 "name": "CV3_INPUT",
                 "label": "CV3"
           }
@@ -1437,12 +1437,12 @@ export const mlModulesRegistry: VcvPluginRegistry = {
                 "label": "Out1"
           },
           {
-                "id": 1,
+                "id": 8,
                 "name": "OUT2_OUTPUT",
                 "label": "Out2"
           },
           {
-                "id": 2,
+                "id": 16,
                 "name": "OUT3_OUTPUT",
                 "label": "Out3"
           }
@@ -1548,7 +1548,7 @@ export const mlModulesRegistry: VcvPluginRegistry = {
                 "label": "Out A"
           },
           {
-                "id": 1,
+                "id": 4,
                 "name": "OUT_B_OUTPUT",
                 "label": "Out B"
           }

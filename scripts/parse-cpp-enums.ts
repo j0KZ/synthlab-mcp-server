@@ -86,13 +86,22 @@ function parseEnumBody(body: string): ParsedEnum[] {
     }
   }
 
-  // Step 2: Strip line comments, collapse whitespace
+  // Step 2: Strip preprocessor blocks (#ifdef...#endif) and standalone directives.
+  // Regex matches only innermost blocks (no nested #if inside), loop peels from inside out.
+  let prev;
+  do {
+    prev = body;
+    body = body.replace(/#if(?:def|ndef)?\b[^\n]*(?:(?!#if(?:def|ndef)?\b)[\s\S])*?#endif[^\n]*/g, "");
+  } while (body !== prev);
+  body = body.replace(/^[\t ]*#\w+[^\n]*/gm, "");
+
+  // Step 3: Strip line comments, collapse whitespace
   const cleaned = body
     .replace(/\/\/[^\n]*/g, "")
     .replace(/\s+/g, " ")
     .trim();
 
-  // Step 3: Split by comma respecting parentheses
+  // Step 4: Split by comma respecting parentheses
   const parts = splitEnumMembers(cleaned);
 
   for (const part of parts) {
@@ -124,6 +133,22 @@ function parseEnumBody(body: string): ParsedEnum[] {
       const numVal = parseInt(valueExpr, 10);
       if (!isNaN(numVal)) {
         currentId = numVal;
+      } else {
+        // Try resolving MEMBER + N or MEMBER - N expressions
+        const exprMatch = valueExpr.match(/^(\w+)\s*([+-])\s*(\d+)$/);
+        if (exprMatch) {
+          const ref = result.find(r => r.name === exprMatch[1]);
+          const offset = parseInt(exprMatch[3], 10);
+          if (ref && !isNaN(offset)) {
+            currentId = exprMatch[2] === "+" ? ref.id + offset : ref.id - offset;
+          } else {
+            // Unresolvable expression — skip this member entirely
+            continue;
+          }
+        } else {
+          // Not a numeric value and not a MEMBER +/- N pattern — skip
+          continue;
+        }
       }
       const removed = removedNames.has(name);
       result.push({ name, id: currentId, ...(removed ? { removed: true } : {}) });

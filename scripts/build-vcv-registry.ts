@@ -27,17 +27,9 @@ interface PluginConfig {
   moduleList?: string[];    // hardcoded modules (for Core: no plugin.json)
 }
 
+// NOTE: Core is manually maintained (src/vcv/registry/core.ts) because it uses
+// C++ template-parameterized ENUMS macros that the auto-parser can't evaluate.
 const PLUGIN_CONFIGS: PluginConfig[] = [
-  {
-    plugin: "Core",
-    repo: "VCVRack/Rack",
-    branch: "v2",
-    srcPath: "src/core",
-    moduleList: [
-      "AudioInterface", "MIDIToCVInterface", "MIDITriggerToCVInterface",
-      "MIDI_Map", "CV_MIDI", "CV_Gate", "Notes", "Blank",
-    ],
-  },
   { plugin: "Fundamental", repo: "VCVRack/Fundamental", branch: "v2" },
   { plugin: "AudibleInstruments", repo: "VCVRack/AudibleInstruments", branch: "v2" },
   { plugin: "Befaco", repo: "VCVRack/Befaco", branch: "v2" },
@@ -46,13 +38,17 @@ const PLUGIN_CONFIGS: PluginConfig[] = [
   { plugin: "ImpromptuModular", repo: "MarcBoule/ImpromptuModular", branch: "master" },
   { plugin: "Valley", repo: "ValleyAudio/ValleyRackFree", branch: "main" },
   { plugin: "stoermelder-packone", repo: "stoermelder/vcvrack-packone", branch: "v2" },
-  { plugin: "NYSTHI", repo: "nysthi/nysthi", branch: "master" },
+
   { plugin: "ML_modules", repo: "martin-lueders/ML_modules", branch: "v2" },
   { plugin: "VCV-Recorder", repo: "VCVRack/VCV-Recorder", branch: "v2" },
   { plugin: "Prism", repo: "SteveRussell33/Prism", branch: "Rack2" },
   { plugin: "GlueTheGiant", repo: "gluethegiant/gtg-rack", branch: "master" },
   { plugin: "OrangeLine", repo: "Stubs42/OrangeLine", branch: "2.0" },
   { plugin: "StudioSixPlusOne", repo: "StudioSixPlusOne/rack-modules", branch: "master" },
+  { plugin: "FrozenWasteland", repo: "almostEric/FrozenWasteland", branch: "master" },
+  { plugin: "ZZC", repo: "zezic/ZZC", branch: "master" },
+  { plugin: "JW-Modules", repo: "jeremywen/JW-Modules", branch: "master" },
+  { plugin: "SubmarineFree", repo: "david-c14/SubmarineFree", branch: "main" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -163,6 +159,9 @@ function findSvgPanel(repoDir: string, slug: string): string | null {
     join(repoDir, "res", `${slug}.svg`),
     join(repoDir, "res", "panels", `${slug}.svg`),
     join(repoDir, "res", `${slug}-panel.svg`),
+    // Lowercase variants + dark-panel pattern (for Orbits, etc.)
+    join(repoDir, "res", `${slug.toLowerCase()}.svg`),
+    join(repoDir, "res", `${slug.toLowerCase()}-dark-panel.svg`),
   ];
   return candidates.find((p) => existsSync(p)) ?? null;
 }
@@ -353,6 +352,14 @@ async function main() {
         const stripped = mod.slug.replace(/^[^-]+-/, "");
         sourceFiles = findModuleSources(srcDir, stripped);
       }
+      // Strategy: strip multi-level underscore prefix (RareBreeds_Orbits_Eugene → Eugene)
+      if (sourceFiles.length === 0 && mod.slug.includes("_")) {
+        const lastPart = mod.slug.split("_").pop()!;
+        sourceFiles = findModuleSources(srcDir, lastPart);
+        if (sourceFiles.length === 0) {
+          sourceFiles = findModuleSources(srcDir, lastPart + "Module");
+        }
+      }
       if (sourceFiles.length === 0) {
         skipped++;
         continue;
@@ -398,28 +405,26 @@ async function main() {
     registries.push({ plugin: config.plugin, slug, varName });
   }
 
-  // Generate index.ts (if not filtering, or if it doesn't exist)
-  if (!filterSet || !existsSync(join(REGISTRY_DIR, "index.ts"))) {
-    // When filtering, merge with existing registries
-    if (filterSet && existsSync(REGISTRY_DIR)) {
-      const existingFiles = readdirSync(REGISTRY_DIR)
-        .filter((f) => f.endsWith(".ts") && f !== "index.ts");
-      for (const f of existingFiles) {
-        const slug = f.replace(".ts", "");
-        if (registries.some((r) => r.slug === slug)) continue;
-        const varName = camelCase(slug) + "Registry";
-        // Read plugin name from file
-        const content = readFileSync(join(REGISTRY_DIR, f), "utf-8");
-        const pluginMatch = content.match(/plugin:\s*"([^"]+)"/);
-        const plugin = pluginMatch?.[1] ?? slug;
-        registries.push({ plugin, slug, varName });
-      }
+  // Generate index.ts — always merge with existing registries (e.g. manually maintained Core).
+  // Scans existing .ts files so --plugins incremental builds include all registries.
+  if (existsSync(REGISTRY_DIR)) {
+    const existingFiles = readdirSync(REGISTRY_DIR)
+      .filter((f) => f.endsWith(".ts") && f !== "index.ts");
+    for (const f of existingFiles) {
+      const slug = f.replace(".ts", "");
+      if (registries.some((r) => r.slug === slug)) continue;
+      const varName = camelCase(slug) + "Registry";
+      // Read plugin name from file
+      const content = readFileSync(join(REGISTRY_DIR, f), "utf-8");
+      const pluginMatch = content.match(/plugin:\s*"([^"]+)"/);
+      const plugin = pluginMatch?.[1] ?? slug;
+      registries.push({ plugin, slug, varName });
     }
-
-    const indexContent = generateIndexFile(registries);
-    writeFileSync(join(REGISTRY_DIR, "index.ts"), indexContent, "utf-8");
-    console.log(`\nWritten: ${join(REGISTRY_DIR, "index.ts")}`);
   }
+
+  const indexContent = generateIndexFile(registries);
+  writeFileSync(join(REGISTRY_DIR, "index.ts"), indexContent, "utf-8");
+  console.log(`\nWritten: ${join(REGISTRY_DIR, "index.ts")}`);
 
   // Cleanup
   console.log(`\nDone! ${registries.length} plugin registries generated.`);

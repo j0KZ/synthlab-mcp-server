@@ -515,38 +515,23 @@ export const orangelineRegistry: VcvPluginRegistry = {
           },
           {
                 "id": 3,
-                "name": "LEN_PARAM_END",
-                "label": "Len Param End"
-          },
-          {
-                "id": 4,
                 "name": "ONOFF_PARAM",
                 "label": "Onoff"
           },
           {
-                "id": 5,
-                "name": "ONOFF_PARAM_END",
-                "label": "Onoff Param End"
-          },
-          {
-                "id": 6,
+                "id": 4,
                 "name": "DUR_PARAM",
                 "label": "Dur"
           },
           {
-                "id": 7,
-                "name": "DUR_PARAM_END",
-                "label": "Dur Param End"
-          },
-          {
-                "id": 8,
+                "id": 5,
                 "name": "HEAT_PARAM",
                 "label": "Heat",
                 "min": 0,
                 "max": 100
           },
           {
-                "id": 9,
+                "id": 6,
                 "name": "SH_PARAM",
                 "label": "Sample & Hold",
                 "min": 0,
@@ -554,7 +539,7 @@ export const orangelineRegistry: VcvPluginRegistry = {
                 "default": 0
           },
           {
-                "id": 10,
+                "id": 7,
                 "name": "GATE_PARAM",
                 "label": "Gate mode",
                 "min": 0,
@@ -562,7 +547,7 @@ export const orangelineRegistry: VcvPluginRegistry = {
                 "default": 0
           },
           {
-                "id": 11,
+                "id": 8,
                 "name": "OFS_PARAM",
                 "label": "Offset",
                 "min": -10,
@@ -570,7 +555,7 @@ export const orangelineRegistry: VcvPluginRegistry = {
                 "default": 0
           },
           {
-                "id": 12,
+                "id": 9,
                 "name": "OFS_ATT_PARAM",
                 "label": "Offset Attenuation",
                 "min": -100,
@@ -578,7 +563,7 @@ export const orangelineRegistry: VcvPluginRegistry = {
                 "default": 0
           },
           {
-                "id": 13,
+                "id": 10,
                 "name": "SCL_PARAM",
                 "label": "Scale",
                 "min": -100,
@@ -586,7 +571,7 @@ export const orangelineRegistry: VcvPluginRegistry = {
                 "default": 100
           },
           {
-                "id": 14,
+                "id": 11,
                 "name": "SCL_ATT_PARAM",
                 "label": "Scale Attenuation",
                 "min": -100,
@@ -594,7 +579,7 @@ export const orangelineRegistry: VcvPluginRegistry = {
                 "default": 0
           },
           {
-                "id": 15,
+                "id": 12,
                 "name": "CHN_PARAM",
                 "label": "Chn"
           }
@@ -681,16 +666,6 @@ export const orangelineRegistry: VcvPluginRegistry = {
                 "id": 3,
                 "name": "CV_OUTPUT",
                 "label": "CV"
-          },
-          {
-                "id": 4,
-                "name": "ifdefUSE_DEBUG_OUTPUTDEBUG_OUTPUT",
-                "label": "Ifdefuse Debug Outputdebug"
-          },
-          {
-                "id": 5,
-                "name": "endifNUM_OUTPUTS",
-                "label": "Endifnum Outputs"
           }
     ],
     },

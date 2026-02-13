@@ -134,7 +134,7 @@ describe("list functions", () => {
     expect(plugins).toContain("Fundamental");
     expect(plugins).toContain("Bogaudio");
     expect(plugins).toContain("AudibleInstruments");
-    expect(plugins.length).toBeGreaterThanOrEqual(15);
+    expect(plugins.length).toBeGreaterThanOrEqual(19);
   });
 
   it("lists modules in a plugin", () => {
@@ -331,5 +331,121 @@ describe("formatModuleDetail", () => {
   it("resolves alias in detail view", () => {
     const result = formatModuleDetail("mi", "texture_synthesizer");
     expect(result).toMatch(/# AudibleInstruments v[\d.]+ \/ Clouds/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Expanded registry — FrozenWasteland
+// ---------------------------------------------------------------------------
+
+describe("expanded registry — FrozenWasteland", () => {
+  it("loads FrozenWasteland plugin", () => {
+    const modules = listVcvModules("FrozenWasteland");
+    expect(modules.length).toBeGreaterThan(10);
+  });
+
+  it("resolves alias 'fw'", () => {
+    const p = getVcvPlugin("fw");
+    expect(p.plugin).toBe("FrozenWasteland");
+  });
+
+  it("resolves alias 'frozen wasteland'", () => {
+    const p = getVcvPlugin("frozen wasteland");
+    expect(p.plugin).toBe("FrozenWasteland");
+  });
+
+  it("QAR (QuadAlgorithmicRhythm) has ports", () => {
+    const mod = getVcvModule("FrozenWasteland", "QuadAlgorithmicRhythm");
+    expect(mod.params.length).toBeGreaterThan(0);
+    expect(mod.outputs.length).toBeGreaterThan(0);
+  });
+
+  it("resolves 'qar' alias to QuadAlgorithmicRhythm", () => {
+    const mod = getVcvModule("FrozenWasteland", "qar");
+    expect(mod.name).toBe("QuadAlgorithmicRhythm");
+  });
+
+  it("resolves 'euclidean' alias to QuadAlgorithmicRhythm", () => {
+    const mod = getVcvModule("FrozenWasteland", "euclidean");
+    expect(mod.name).toBe("QuadAlgorithmicRhythm");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Expanded registry — ZZC
+// ---------------------------------------------------------------------------
+
+describe("expanded registry — ZZC", () => {
+  it("loads ZZC plugin", () => {
+    const modules = listVcvModules("ZZC");
+    expect(modules.length).toBeGreaterThan(3);
+  });
+
+  it("resolves FN-3 alias fn3", () => {
+    const mod = getVcvModule("ZZC", "fn3");
+    expect(mod.name).toBe("FN-3");
+  });
+
+  it("resolves SH-8 alias sh8", () => {
+    const mod = getVcvModule("ZZC", "sh8");
+    expect(mod.name).toBe("SH-8");
+  });
+
+  it("Phaseque has params and outputs", () => {
+    const mod = getVcvModule("ZZC", "Phaseque");
+    expect(mod.params.length).toBeGreaterThan(0);
+    expect(mod.outputs.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Expanded registry — JW-Modules
+// ---------------------------------------------------------------------------
+
+describe("expanded registry — JW-Modules", () => {
+  it("loads JW-Modules plugin", () => {
+    const modules = listVcvModules("JW-Modules");
+    expect(modules.length).toBeGreaterThan(15);
+  });
+
+  it("resolves alias 'jw'", () => {
+    const p = getVcvPlugin("jw");
+    expect(p.plugin).toBe("JW-Modules");
+  });
+
+  it("GridSeq has expression-resolved params", () => {
+    const mod = getVcvModule("JW-Modules", "GridSeq");
+    expect(mod.params.length).toBeGreaterThan(10);
+  });
+
+  it("resolves 'gridseq' alias", () => {
+    const mod = getVcvModule("JW-Modules", "gridseq");
+    expect(mod.name).toBe("GridSeq");
+  });
+
+  it("resolves 'noteseq' alias", () => {
+    const mod = getVcvModule("JW-Modules", "noteseq");
+    expect(mod.name).toBe("NoteSeq");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Expanded registry — SubmarineFree
+// ---------------------------------------------------------------------------
+
+describe("expanded registry — SubmarineFree", () => {
+  it("loads SubmarineFree plugin", () => {
+    const modules = listVcvModules("SubmarineFree");
+    expect(modules.length).toBeGreaterThan(15);
+  });
+
+  it("resolves alias 'submarine'", () => {
+    const p = getVcvPlugin("submarine");
+    expect(p.plugin).toBe("SubmarineFree");
+  });
+
+  it("resolves alias 'sub'", () => {
+    const p = getVcvPlugin("sub");
+    expect(p.plugin).toBe("SubmarineFree");
   });
 });
