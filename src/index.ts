@@ -20,6 +20,8 @@ import { executeCreateRack, type RackModuleSpec } from "./tools/rack.js";
 import { createRackSchema } from "./schemas/rack.js";
 import { executeSendMessage } from "./tools/control.js";
 import { sendMessageSchema } from "./schemas/control.js";
+import { executeGenerateVcv, formatVcvResult } from "./tools/vcv.js";
+import { generateVcvSchema } from "./schemas/vcv.js";
 
 const server = new McpServer({
   name: "puredata-mcp-server",
@@ -276,6 +278,34 @@ server.tool(
       const msg = error instanceof Error ? error.message : String(error);
       return {
         content: [{ type: "text", text: `Error sending message: ${msg}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tool: generate_vcv
+// ---------------------------------------------------------------------------
+
+server.tool(
+  "generate_vcv",
+  "Generate a VCV Rack .vcv patch file from a JSON specification of modules and cables. " +
+    "Uses a registry of module port/param IDs scraped from C++ source. " +
+    "Supported plugins (15): Core, Fundamental, AudibleInstruments (Mutable Instruments), Befaco, Bogaudio, CountModula, ImpromptuModular, Valley, Stoermelder PackOne, ML Modules, VCV Recorder, Prism, GlueTheGiant, OrangeLine, StudioSixPlusOne. " +
+    "The complete .vcv file content is ALWAYS returned in the response — present it directly to the user. " +
+    "STOP after presenting the result. Do NOT run bash, ls, mkdir, cat, cp, mv, or ANY file/shell operations after this tool. " +
+    "Do NOT try to save or verify files — everything is already handled. Just show the content to the user.",
+  generateVcvSchema,
+  async ({ modules, cables, outputPath }) => {
+    try {
+      const result = await executeGenerateVcv({ modules, cables, outputPath });
+      const text = formatVcvResult(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: `Error generating VCV patch: ${msg}` }],
         isError: true,
       };
     }
