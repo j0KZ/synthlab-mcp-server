@@ -1,83 +1,82 @@
 # puredata-mcp
 
-**MCP Server for Pure Data** — Parse, generate, analyze, and control Pd patches through AI.
+**MCP Server for Pure Data & VCV Rack** — Parse, generate, analyze, and control Pd patches + generate VCV Rack patches through AI.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-blueviolet)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-396%2F396-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-499%2F499-brightgreen)]()
 
 ---
 
 ## What is this?
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives AI assistants deep understanding of [Pure Data](https://puredata.info/) patches. Instead of treating `.pd` files as opaque text, this server parses them into a structured AST, enabling Claude to:
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives AI assistants deep understanding of [Pure Data](https://puredata.info/) and [VCV Rack](https://vcvrack.com/) patches. 8 tools, 499 tests, zero runtime dependencies beyond MCP SDK + Zod.
 
-- **Read** any `.pd` file and explain its signal flow in plain language
-- **Generate** valid patches from natural language descriptions
-- **Analyze** patches for broken connections, orphan objects, and complexity metrics
-- **Template** 11 parameterized instruments (synth, sequencer, drums, reverb, bridge, etc.)
-- **Rack** assemble multiple modules with inter-module wiring (Eurorack-style)
-- **Control** send OSC/FUDI messages to running Pd instances in real time
-- **Map** MIDI hardware (K2, MicroFreak, TR-8S) to rack parameters automatically
+**Pure Data** — parse `.pd` files into a structured AST, generate patches from specs, analyze signal flow, template 11 instruments, assemble multi-module racks with wiring, map MIDI hardware, send OSC/FUDI in real time.
+
+**VCV Rack** — generate `.vcv` patch files from module + cable specs, with a registry of 15 plugins (~400 modules) scraped from C++ source.
 
 > *"Create a rack with clock, sequencer, synth with saw wave, reverb, and mixer — wire them together, add K2 controller"* → complete `.pd` rack that opens in Pure Data with hardware MIDI control
+
+> *"Create a VCV Rack patch with VCO → VCF → VCA → AudioInterface2, saw wave into lowpass filter"* → `.vcv` file that loads in VCV Rack 2.x
 
 ---
 
 ## Architecture
 
 ```
-+------------------------------------------------------------------+
-|                      Claude / AI Client                          |
-+---------------------------+--------------------------------------+
-                            | MCP (stdio)
-+---------------------------v--------------------------------------+
-|                   puredata-mcp-server                             |
-|                                                                   |
-|  +------------------+  +------------------+  +----------------+  |
-|  |   parse_patch    |  |  generate_patch  |  | analyze_patch  |  |
-|  |  validate_patch  |  |  send_message    |  | create_rack    |  |
-|  +--------+---------+  +--------+---------+  +-------+--------+  |
-|           |                     |                     |           |
-|  +--------v---------------------v---------------------v--------+ |
-|  |                      Core Engine                            | |
-|  |  +----------+  +------------+  +-----------+  +----------+ | |
-|  |  |  Parser  |  | Serializer |  | Validator |  | Registry | | |
-|  |  | .pd->AST |  |  AST->.pd  |  |  Checks   |  | ~100 obj | | |
-|  |  +----------+  +------------+  +-----------+  +----------+ | |
-|  +-------------------------------------------------------------+ |
-|                                                                   |
-|  +-------------------------------------------------------------+ |
-|  |           Template Engine (11 templates)                     | |
-|  |  synth | seq | drums | reverb | mixer | clock | bridge       | |
-|  |  chaos | maths | turing-machine | granular                   | |
-|  +-----------------------------+-------------------------------+ |
-|                                |                                  |
-|  +-----------------------------v-------------------------------+ |
-|  |              Rack Builder + Wiring                          | |
-|  |  throw~/catch~ (audio) | send/receive (control)             | |
-|  +-------------------------------------------------------------+ |
-|                                                                   |
-|  +-------------------------------------------------------------+ |
-|  |           MIDI Controller System                             | |
-|  |  auto-mapper | input/output controllers | device profiles    | |
-|  |  K2 (abs+rel+trigger) | MicroFreak (output) | TR-8S (bidir) | |
-|  +-------------------------------------------------------------+ |
-|                                                                   |
-|  +-------------------------------------------------------------+ |
-|  |           Network Layer (zero external deps)                 | |
-|  |  OSC encoder (binary) | FUDI formatter (text)                | |
-|  |  UDP sender (dgram) | TCP sender (net)                       | |
-|  +-------------------------------------------------------------+ |
 +-------------------------------------------------------------------+
-                            |
-              OSC (UDP) / FUDI (TCP)
-                            |
-                    +-------v-------+
-                    |  Pure Data    |
-                    |  (running)    |
-                    +---------------+
+|                      Claude / AI Client                           |
++---------------------------+---------------------------------------+
+                            | MCP (stdio)
++---------------------------v---------------------------------------+
+|                   puredata-mcp-server                              |
+|                                                                    |
+|  8 MCP Tools                                                       |
+|  +------------------+  +------------------+  +-----------------+  |
+|  |   parse_patch    |  |  generate_patch  |  |  analyze_patch  |  |
+|  |  validate_patch  |  | create_template  |  |   create_rack   |  |
+|  |  send_message    |  |  generate_vcv    |  |                 |  |
+|  +--------+---------+  +--------+---------+  +--------+--------+  |
+|           |                     |                      |          |
+|  +--------v---------------------v----------------------v--------+ |
+|  |                      Pd Core Engine                          | |
+|  |  Parser (.pd→AST) | Serializer (AST→.pd) | Validator        | |
+|  |  Object Registry (~100 Pd-vanilla objects)                   | |
+|  +--------------------------------------------------------------+ |
+|                                                                    |
+|  +--------------------------------------------------------------+ |
+|  |           Template Engine (11 templates)                      | |
+|  |  synth | seq | drums | reverb | mixer | clock | bridge        | |
+|  |  chaos | maths | turing-machine | granular                    | |
+|  +--------------------------------------------------------------+ |
+|                                                                    |
+|  +--------------------------------------------------------------+ |
+|  |    Rack Builder + Wiring + MIDI Controllers                   | |
+|  |  throw~/catch~ (audio) | send/receive (control)               | |
+|  |  K2 (abs+rel+trigger) | MicroFreak (output) | TR-8S (bidir)  | |
+|  +--------------------------------------------------------------+ |
+|                                                                    |
+|  +--------------------------------------------------------------+ |
+|  |           VCV Rack Generator                                  | |
+|  |  15-plugin registry (~400 modules) from C++ source scraping   | |
+|  |  Fuzzy port/param resolution | HP positioning | Cable wiring  | |
+|  +--------------------------------------------------------------+ |
+|                                                                    |
+|  +--------------------------------------------------------------+ |
+|  |           Network Layer (zero external deps)                  | |
+|  |  OSC encoder (binary) | FUDI formatter (text)                 | |
+|  |  UDP sender (dgram) | TCP sender (net)                        | |
+|  +--------------------------------------------------------------+ |
++--------------------------------------------------------------------+
+              |                                 |
+    OSC (UDP) / FUDI (TCP)               .vcv file output
+              |                                 |
+      +-------v-------+               +--------v--------+
+      |  Pure Data    |               |  VCV Rack 2.x   |
+      |  (running)    |               |                  |
+      +---------------+               +-----------------+
 ```
 
 ---
@@ -209,6 +208,50 @@ Use the `bridge` template to generate the Pd-side receiver patch:
 - OSC: `[netreceive -u -b 9000]` → `[oscparse]` → `[route /pd]` → per-route `[send]`
 - FUDI: `[netreceive 3000]` → `[route]` → per-route `[send]`
 
+### VCV Rack Generator — `.vcv` patch files
+
+Generates VCV Rack v2 patch files (plain JSON `.vcv` format) from module + cable specifications.
+
+**15 plugin registries** (~400 modules) with port/param IDs scraped from C++ source:
+
+| Plugin | Modules | Source |
+|--------|---------|--------|
+| **Core** | 9 | AudioInterface2, MIDIToCVInterface, CV-MIDI, Notes, etc. |
+| **Fundamental** | 35 | VCO, VCF, VCA, LFO, ADSR, Mixer, SEQ-3, Scope, etc. |
+| **Bogaudio** | 111 | VCO, VCF, ADSR, Mix8, FMOp, Noise, etc. |
+| **CountModula** | 50+ | Sequencers, gates, logic, quantizers |
+| **AudibleInstruments** | 20 | Mutable Instruments clones (Braids, Clouds, Rings, etc.) |
+| **ImpromptuModular** | 30+ | Clocked, Foundry, Phrase-Seq, etc. |
+| **Befaco** | 32 | EvenVCO, Mixer, Slew, SpringReverb, etc. |
+| **Valley** | 9 | Plateau, Dexter, Amalgam, etc. |
+| **Stoermelder PackOne** | 42 | STRIP, MIDI-CAT, 8FACE, etc. |
+| + 6 more | ~60 | ML Modules, Prism, GlueTheGiant, OrangeLine, StudioSixPlusOne, VCV Recorder |
+
+**Features:**
+- Fuzzy port/param resolution (by label, name, partial match, or ID)
+- Plugin aliases (`"vcv"` → Fundamental, `"mi"` → AudibleInstruments, `"bg"` → Bogaudio)
+- Left-to-right HP positioning with module adjacency chain
+- Cable color cycling (5-color palette) or custom hex colors
+- Param overrides with default values from registry
+- Duplicate input port validation
+- Path sanitization for file output
+
+```json
+{
+  "modules": [
+    { "plugin": "Fundamental", "model": "VCO" },
+    { "plugin": "Fundamental", "model": "VCF", "params": { "Frequency": 2.0 } },
+    { "plugin": "Fundamental", "model": "VCA" },
+    { "plugin": "Core", "model": "AudioInterface2" }
+  ],
+  "cables": [
+    { "from": { "module": 0, "port": "Saw" }, "to": { "module": 1, "port": "Audio" } },
+    { "from": { "module": 1, "port": "Lowpass" }, "to": { "module": 2, "port": "Channel 1" } },
+    { "from": { "module": 2, "port": "Channel 1" }, "to": { "module": 3, "port": "Audio 1" } }
+  ]
+}
+```
+
 ### Patch Analyzer — Deep structural analysis
 - **Object counts** by category (audio, control, MIDI, math, etc.)
 - **Signal flow graph** — adjacency list with topological sort (Kahn's algorithm), cycle detection
@@ -250,6 +293,8 @@ Open Claude Desktop and ask:
 > *"Parse the file /path/to/my-patch.pd and explain what it does"*
 
 > *"Create a rack with clock, sequencer, saw synth, reverb, and mixer — wire clock to sequencer, sequencer to synth, synth through reverb to mixer"*
+
+> *"Create a VCV Rack patch with Fundamental VCO, VCF, and AudioInterface2 — saw output through lowpass filter to audio"*
 
 > *"Send /pd/tempo 140 to my running Pd instance"*
 
@@ -318,13 +363,24 @@ Send a control message to a running Pd instance via OSC or FUDI.
 | `address` | `string` | Message address (e.g. `/pd/tempo`) |
 | `args` | `array?` | Message arguments (numbers or strings) |
 
+### `generate_vcv`
+Generate a VCV Rack `.vcv` patch file from module and cable specifications.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `modules` | `array` | Module specs: `{ plugin, model, params? }` |
+| `cables` | `array?` | Cable connections: `{ from: {module, port}, to: {module, port}, color? }` |
+| `outputPath` | `string?` | Write `.vcv` file (optional) |
+
+Supports 15 plugins with aliases: `"vcv"` → Fundamental, `"mi"` → AudibleInstruments, `"bg"` → Bogaudio, `"stoermelder"` → PackOne, etc.
+
 ---
 
 ## Project Structure
 
 ```
-src/                            # ~8,500 lines
-  index.ts                      # MCP server — 7 tools, stdio transport
+src/                            # ~8,600 lines (+ 42,800 registry data)
+  index.ts                      # MCP server — 8 tools, stdio transport
   types.ts                      # PdPatch, PdCanvas, PdNode, PdConnection
   constants.ts                  # Format constants, layout defaults
   core/
@@ -338,6 +394,7 @@ src/                            # ~8,500 lines
     template.ts                 # Zod schema for create_from_template
     rack.ts                     # Zod schema for create_rack
     control.ts                  # Zod schema for send_message
+    vcv.ts                      # Zod schema for generate_vcv
   templates/
     index.ts                    # Template registry + dispatcher (11 templates)
     port-info.ts                # PortInfo, RackableSpec types for wiring
@@ -354,7 +411,6 @@ src/                            # ~8,500 lines
     granular.ts                 # Granular synthesis sampler
     bridge.ts                   # OSC/FUDI network receiver
     modules/
-      types.ts                  # ModuleResult, ModuleWire interfaces
       compose.ts                # Module composition with index offsetting
       oscillator.ts             # 4 variants: sine, saw, square, noise
       filter.ts                 # 5 variants: lowpass, highpass, bandpass, moog, korg
@@ -363,14 +419,12 @@ src/                            # ~8,500 lines
       delay.ts                  # 2 variants: simple, pingpong
       reverb.ts                 # 2 variants: schroeder, simple
   controllers/
-    types.ts                    # ControllerMapping, DeviceProfile interfaces
-    auto-mapper.ts              # 4-phase auto-mapping (custom → amp → freq → rest)
+    auto-mapper.ts              # 4-phase auto-mapping (custom -> amp -> freq -> rest)
     pd-controller.ts            # Input controller patch builder
     pd-output-controller.ts     # Output controller (ctlout feedback)
     param-injector.ts           # Parameter bus injection
     k2-deck-config.ts           # K2 LED configuration generator
   devices/
-    types.ts                    # DeviceProfile interface
     index.ts                    # Device registry
     k2.ts                       # Korg nanoKONTROL2 (34 controls)
     microfreak.ts               # Arturia MicroFreak (21 outputs)
@@ -380,32 +434,55 @@ src/                            # ~8,500 lines
     fudi-formatter.ts           # FUDI text formatter
     udp-sender.ts               # UDP fire-and-forget (dgram)
     tcp-sender.ts               # TCP send/receive (net)
+  vcv/
+    types.ts                    # Registry, spec, and serialization types
+    generator.ts                # Module resolution, cables, positioning
+    positioner.ts               # Left-to-right HP layout
+    registry.ts                 # Plugin lookup with aliases + fuzzy matching
+    validate-vcv-params.ts      # Claude Desktop quirk coercion
+    registry/                   # 15 auto-generated plugin registries
+      core.ts                   # 9 modules (manual — complex ENUMS)
+      fundamental.ts            # 35 modules
+      bogaudio.ts               # 111 modules
+      audibleinstruments.ts     # 20 modules
+      befaco.ts                 # 32 modules
+      countmodula.ts            # 50+ modules
+      impromptumodular.ts       # 30+ modules
+      valley.ts                 # 9 modules
+      stoermelder-packone.ts    # 42 modules
+      + 6 more                  # ml-modules, orangeline, prism, etc.
   tools/
-    parse.ts                    # parse_patch tool
-    generate.ts                 # generate_patch tool
-    validate.ts                 # validate_patch tool
-    analyze.ts                  # analyze_patch tool
-    template.ts                 # create_from_template tool
+    parse.ts                    # parse_patch tool handler
+    generate.ts                 # generate_patch tool handler
+    validate.ts                 # validate_patch tool handler
+    analyze.ts                  # analyze_patch tool handler
+    template.ts                 # create_from_template tool handler
     rack.ts                     # create_rack + combined patch builder
-    control.ts                  # send_message tool
+    control.ts                  # send_message tool handler
+    vcv.ts                      # generate_vcv tool handler
   wiring/
     bus-injector.ts             # Inter-module wiring (throw~/catch~, send/receive)
   utils/
     resolve-source.ts           # File-path vs raw-text resolver
 
-tests/                          # 396 tests, ~5,300 lines
+scripts/                        # ~620 lines
+  build-vcv-registry.ts         # Clone repos -> parse C++ -> generate .ts
+  parse-cpp-enums.ts            # C++ enum parser (ParamIds, InputIds, etc.)
+  parse-svg-width.ts            # SVG panel width -> HP conversion
+
+tests/                          # 499 tests, ~5,500 lines
   parser.test.ts                # 12 — parsing, subpatches, edge cases
   serializer.test.ts            # 8 — round-trip, spec builder, escaping
   object-registry.test.ts       # 37 — port counts, aliases, variable objects
   validator.test.ts             # 20 — each check type + fixtures
   analyze.test.ts               # 17 — counts, flow, DSP chains, complexity
   controllers/
-    controller.test.ts          # 71 — auto-mapper, controller patches, device profiles
+    controller.test.ts          # 80 — auto-mapper, controller patches, device profiles
   templates/
     compose.test.ts             # 5 — module composition, wiring
     modules.test.ts             # 17 — all module variants
     templates.test.ts           # 38 — complete template round-trips
-    edge-cases.test.ts          # 99 — param validation, coercion, boundaries
+    edge-cases.test.ts          # 106 — param validation, coercion, boundaries
     bridge.test.ts              # 3 — OSC/FUDI bridge variants
   network/
     osc-encoder.test.ts         # 8 — binary encoding, padding, type inference
@@ -414,6 +491,15 @@ tests/                          # 396 tests, ~5,300 lines
   tools/
     rack.test.ts                # 13 — rack assembly, layout, file writing
     rack-wiring.test.ts         # 13 — wiring integration, bus injection
+    vcv.test.ts                 # 8 — tool handler, format, sanitization
+  vcv/
+    generator.test.ts           # 15 — modules, cables, positions, errors
+    registry.test.ts            # 31 — 15 plugins, aliases, fuzzy resolution
+    positioner.test.ts          # 5 — HP layout, adjacency chain
+    validate-vcv-params.test.ts # 8 — coercion, empty arrays, booleans
+  scripts/
+    parse-cpp-enums.test.ts     # 25 — enums, ENUMS macro, removed, labels
+    parse-svg-width.test.ts     # 4 — mm/px to HP conversion
   wiring/
     bus-injector.test.ts        # 17 — connection helpers, validation
   fixtures/
@@ -432,9 +518,16 @@ tests/                          # 396 tests, ~5,300 lines
 ```bash
 npm run build        # Compile with tsup (ESM + declarations)
 npm run dev          # Watch mode
-npm run test         # Run vitest (396 tests)
+npm run test         # Run vitest (499 tests)
 npm run lint         # Type-check with tsc --noEmit
 npm run inspect      # Test server with MCP Inspector
+```
+
+### VCV Registry rebuild (only needed when plugins update)
+
+```bash
+npm run vcv:build-registry   # Clone repos -> parse C++ -> regenerate src/vcv/registry/*.ts
+npm run build                # Rebundle
 ```
 
 ---
@@ -446,8 +539,9 @@ npm run inspect      # Test server with MCP Inspector
 | **TypeScript** (strict mode) | Type-safe parser and serializer |
 | **MCP SDK** (`@modelcontextprotocol/sdk`) | Protocol implementation |
 | **Zod** | Runtime input validation |
-| **Vitest** | Test runner (396 tests) |
-| **tsup** | Bundler (ESM output) |
+| **Vitest** | Test runner (499 tests) |
+| **tsup** | Bundler (ESM output, 1.04 MB) |
+| **tsx** | TypeScript execution for build scripts |
 | **Zero runtime deps** beyond MCP SDK + Zod | OSC via `dgram`, FUDI via `net` |
 
 ---
@@ -461,6 +555,7 @@ npm run inspect      # Test server with MCP Inspector
 - [x] **Phase 5**: Inter-module wiring (throw~/catch~, send/receive, clock sync)
 - [x] **Phase 7**: MIDI hardware integration (K2, MicroFreak, TR-8S controller profiles)
 - [x] **Phase 8**: Live control via OSC/FUDI (`send_message` tool + `bridge` template)
+- [x] **Phase 10**: VCV Rack patch generation (`generate_vcv` tool + 15-plugin registry)
 - [ ] **Phase 9**: Socratic song analysis (analyze reference → generate matching patches)
 
 ---
