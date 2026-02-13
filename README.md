@@ -5,13 +5,13 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-blueviolet)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-499%2F499-brightgreen)]()
+[![Tests](https://img.shields.io/badge/Tests-580%2F580-brightgreen)]()
 
 ---
 
 ## What is this?
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives AI assistants deep understanding of [Pure Data](https://puredata.info/) and [VCV Rack](https://vcvrack.com/) patches. 8 tools, 499 tests, zero runtime dependencies beyond MCP SDK + Zod.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives AI assistants deep understanding of [Pure Data](https://puredata.info/) and [VCV Rack](https://vcvrack.com/) patches. 9 tools + 1 prompt, 580 tests, zero runtime dependencies beyond MCP SDK + Zod.
 
 **Pure Data** — parse `.pd` files into a structured AST, generate patches from specs, analyze signal flow, template 11 instruments, assemble multi-module racks with wiring, map MIDI hardware, send OSC/FUDI in real time.
 
@@ -20,6 +20,8 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that 
 > *"Create a rack with clock, sequencer, synth with saw wave, reverb, and mixer — wire them together, add K2 controller"* → complete `.pd` rack that opens in Pure Data with hardware MIDI control
 
 > *"Create a VCV Rack patch with VCO → VCF → VCA → AudioInterface2, saw wave into lowpass filter"* → `.vcv` file that loads in VCV Rack 2.x
+
+> *"Compose a dark techno track with drums, bass, and an arpeggio — use K2 controller"* → complete rack with clock, sequencer, synths, mixer, reverb, and MIDI mapping
 
 ---
 
@@ -33,11 +35,11 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that 
 +---------------------------v---------------------------------------+
 |                   puredata-mcp-server                              |
 |                                                                    |
-|  8 MCP Tools                                                       |
+|  9 MCP Tools + 1 Prompt                                              |
 |  +------------------+  +------------------+  +-----------------+  |
 |  |   parse_patch    |  |  generate_patch  |  |  analyze_patch  |  |
 |  |  validate_patch  |  | create_template  |  |   create_rack   |  |
-|  |  send_message    |  |  generate_vcv    |  |                 |  |
+|  |  send_message    |  |  generate_vcv    |  | compose_patch   |  |
 |  +--------+---------+  +--------+---------+  +--------+--------+  |
 |           |                     |                      |          |
 |  +--------v---------------------v----------------------v--------+ |
@@ -252,6 +254,61 @@ Generates VCV Rack v2 patch files (plain JSON `.vcv` format) from module + cable
 }
 ```
 
+### Song Composer — Genre-driven rack generation
+
+High-level creative interface: describe a song by genre, mood, tempo, key, and instruments — get a complete wired Pd rack with MIDI controller integration.
+
+**9 genres** with curated presets:
+
+| Genre | Default Tempo | Default Mood | Default Instruments |
+|-------|--------------|-------------|---------------------|
+| `ambient` | 70 | ethereal | pad, texture |
+| `techno` | 130 | dark | drums, bass, lead |
+| `house` | 124 | energetic | drums, bass, pad |
+| `dnb` | 174 | aggressive | drums, bass, lead |
+| `experimental` | 100 | dark | modulator, texture, sequence |
+| `idm` | 140 | ethereal | drums, arpeggio, modulator |
+| `minimal` | 125 | chill | drums, bass |
+| `drone` | 40 | melancholic | pad, pad |
+| `noise` | 120 | aggressive | texture, modulator, drums |
+
+**7 moods** adjust synthesis parameters (cutoff, reverb room size, drum tone): dark, bright, aggressive, chill, ethereal, melancholic, energetic.
+
+**8 instrument roles** map to templates with automatic multi-module expansion:
+
+| Role | Expands To | Wiring |
+|------|-----------|--------|
+| `lead` | synth (ADSR) | seq → note |
+| `bass` | synth (low octave, ADSR) | seq → note |
+| `pad` | synth (slow envelope) | — |
+| `drums` | drum-machine | clock → triggers |
+| `arpeggio` | sequencer + synth | clock → seq → synth |
+| `sequence` | sequencer | clock → seq |
+| `texture` | noise synth + granular | synth → granular |
+| `modulator` | turing-machine + synth | clock → turing → synth |
+
+**Auto-wiring engine** builds the full signal chain: clock → sequencers → synths → mixer → effects.
+
+**10 musical scales** (major, minor, dorian, phrygian, mixolydian, pentatonic-major/minor, chromatic, whole-tone, blues) × 12 root notes for sequencer note generation.
+
+The `song_analysis` MCP prompt guides Claude through Socratic questions to fill the spec before calling `compose_patch`.
+
+```json
+{
+  "genre": "dnb",
+  "tempo": 175,
+  "mood": "aggressive",
+  "key": { "root": "E", "scale": "minor" },
+  "instruments": [
+    { "role": "drums" },
+    { "role": "bass" },
+    { "role": "arpeggio" }
+  ],
+  "effects": ["reverb"],
+  "controller": { "device": "k2" }
+}
+```
+
 ### Patch Analyzer — Deep structural analysis
 - **Object counts** by category (audio, control, MIDI, math, etc.)
 - **Signal flow graph** — adjacency list with topological sort (Kahn's algorithm), cycle detection
@@ -374,13 +431,31 @@ Generate a VCV Rack `.vcv` patch file from module and cable specifications.
 
 Supports 15 plugins with aliases: `"vcv"` → Fundamental, `"mi"` → AudibleInstruments, `"bg"` → Bogaudio, `"stoermelder"` → PackOne, etc.
 
+### `compose_patch`
+Generate a complete wired Pd rack from a high-level song description (genre, mood, tempo, key, instruments, effects, controller).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `genre` | `string` | Genre preset (ambient, techno, house, dnb, experimental, idm, minimal, drone, noise) |
+| `tempo` | `number?` | Override BPM (clamped to genre range) |
+| `mood` | `string?` | Mood adjustment (dark, bright, aggressive, chill, ethereal, melancholic, energetic) |
+| `key` | `object?` | Musical key: `{ root: NoteName, scale: ScaleType }` |
+| `instruments` | `array?` | Instrument specs: `{ role, id?, template?, params? }` |
+| `effects` | `array?` | Effect chain: `["reverb", "granular"]` |
+| `controller` | `object?` | MIDI controller: `{ device, midiChannel?, mappings? }` |
+
+### MCP Prompts
+
+#### `song_analysis`
+Guided Socratic conversation to design a song step by step (genre → mood → tempo → key → instruments → effects → controller) then call `compose_patch`.
+
 ---
 
 ## Project Structure
 
 ```
-src/                            # ~8,600 lines (+ 42,800 registry data)
-  index.ts                      # MCP server — 8 tools, stdio transport
+src/                            # ~9,500 lines (+ 42,800 registry data)
+  index.ts                      # MCP server — 9 tools + 1 prompt, stdio transport
   types.ts                      # PdPatch, PdCanvas, PdNode, PdConnection
   constants.ts                  # Format constants, layout defaults
   core/
@@ -388,12 +463,20 @@ src/                            # ~8,600 lines (+ 42,800 registry data)
     serializer.ts               # AST -> .pd text + buildPatch()
     object-registry.ts          # ~100 Pd-vanilla objects with port counts
     validator.ts                # 9 structural checks
+  composer/
+    types.ts                    # SongSpec, Genre, Mood, InstrumentRole types
+    presets.ts                  # 9 genre presets (tempo, instruments, key, mood)
+    moods.ts                    # 7 mood adjustments (cutoff, reverb, drum tone)
+    scales.ts                   # Scale generator (10 scales × 12 keys → MIDI notes)
+    wiring-rules.ts             # Auto-wiring engine (clock→seq→synth→mixer→fx)
+    song-mapper.ts              # SongSpec → CreateRackInput mapper
   schemas/
     patch.ts                    # Zod schemas for parse/generate
     analyze.ts                  # Zod schemas for validate/analyze
     template.ts                 # Zod schema for create_from_template
     rack.ts                     # Zod schema for create_rack
     control.ts                  # Zod schema for send_message
+    compose.ts                  # Zod schema for compose_patch
     vcv.ts                      # Zod schema for generate_vcv
   templates/
     index.ts                    # Template registry + dispatcher (11 templates)
@@ -458,6 +541,7 @@ src/                            # ~8,600 lines (+ 42,800 registry data)
     analyze.ts                  # analyze_patch tool handler
     template.ts                 # create_from_template tool handler
     rack.ts                     # create_rack + combined patch builder
+    compose.ts                  # compose_patch tool handler
     control.ts                  # send_message tool handler
     vcv.ts                      # generate_vcv tool handler
   wiring/
@@ -470,16 +554,18 @@ scripts/                        # ~620 lines
   parse-cpp-enums.ts            # C++ enum parser (ParamIds, InputIds, etc.)
   parse-svg-width.ts            # SVG panel width -> HP conversion
 
-tests/                          # 499 tests, ~5,500 lines
-  parser.test.ts                # 12 — parsing, subpatches, edge cases
+tests/                          # 580 tests, ~6,500 lines
+  parser.test.ts                # 14 — parsing, subpatches, arrays, edge cases
   serializer.test.ts            # 8 — round-trip, spec builder, escaping
   object-registry.test.ts       # 37 — port counts, aliases, variable objects
   validator.test.ts             # 20 — each check type + fixtures
-  analyze.test.ts               # 17 — counts, flow, DSP chains, complexity
+  analyze.test.ts               # 29 — counts, flow, DSP chains, complexity, formatting
+  composer/
+    composer.test.ts            # 42 — scales, presets, moods, wiring, mapper, validation
   controllers/
     controller.test.ts          # 80 — auto-mapper, controller patches, device profiles
   templates/
-    compose.test.ts             # 5 — module composition, wiring
+    compose.test.ts             # 8 — module composition, wiring, autoLayout
     modules.test.ts             # 17 — all module variants
     templates.test.ts           # 38 — complete template round-trips
     edge-cases.test.ts          # 106 — param validation, coercion, boundaries
@@ -487,11 +573,15 @@ tests/                          # 499 tests, ~5,500 lines
   network/
     osc-encoder.test.ts         # 8 — binary encoding, padding, type inference
     fudi-formatter.test.ts      # 3 — text formatting
+    udp-sender.test.ts          # 3 — UDP send, socket error mock
     control.test.ts             # 6 — mock UDP/TCP servers, end-to-end
   tools/
     rack.test.ts                # 13 — rack assembly, layout, file writing
     rack-wiring.test.ts         # 13 — wiring integration, bus injection
+    compose.test.ts             # 14 — compose_patch tool, genres, validation, coercion
     vcv.test.ts                 # 8 — tool handler, format, sanitization
+  utils/
+    resolve-source.test.ts      # 5 — raw text vs file path resolution
   vcv/
     generator.test.ts           # 15 — modules, cables, positions, errors
     registry.test.ts            # 31 — 15 plugins, aliases, fuzzy resolution
@@ -518,7 +608,7 @@ tests/                          # 499 tests, ~5,500 lines
 ```bash
 npm run build        # Compile with tsup (ESM + declarations)
 npm run dev          # Watch mode
-npm run test         # Run vitest (499 tests)
+npm run test         # Run vitest (580 tests)
 npm run lint         # Type-check with tsc --noEmit
 npm run inspect      # Test server with MCP Inspector
 ```
@@ -539,7 +629,7 @@ npm run build                # Rebundle
 | **TypeScript** (strict mode) | Type-safe parser and serializer |
 | **MCP SDK** (`@modelcontextprotocol/sdk`) | Protocol implementation |
 | **Zod** | Runtime input validation |
-| **Vitest** | Test runner (499 tests) |
+| **Vitest** | Test runner (580 tests) |
 | **tsup** | Bundler (ESM output, 1.04 MB) |
 | **tsx** | TypeScript execution for build scripts |
 | **Zero runtime deps** beyond MCP SDK + Zod | OSC via `dgram`, FUDI via `net` |
@@ -556,7 +646,7 @@ npm run build                # Rebundle
 - [x] **Phase 7**: MIDI hardware integration (K2, MicroFreak, TR-8S controller profiles)
 - [x] **Phase 8**: Live control via OSC/FUDI (`send_message` tool + `bridge` template)
 - [x] **Phase 10**: VCV Rack patch generation (`generate_vcv` tool + 15-plugin registry)
-- [ ] **Phase 9**: Socratic song analysis (analyze reference → generate matching patches)
+- [x] **Phase 9**: Song composer (`compose_patch` tool + `song_analysis` prompt — genre/mood/tempo → wired rack)
 
 ---
 

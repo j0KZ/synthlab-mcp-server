@@ -242,6 +242,17 @@ export function buildSynth(params: SynthParams = {}): RackableSpec {
     wire(releaseMsg, vline);
     envOut = vline;
     envBottomY = ey;
+
+    // Auto-gate: retrigger envelope on each note change.
+    // midiAtom → [1( → gateAtom (fires attack whenever a new note arrives).
+    const autoGateMsg = add({
+      type: "msg",
+      args: [1],
+      x: COL_OSC + 100,
+      y: 60,
+    });
+    wire(midiAtom, autoGateMsg);
+    wire(autoGateMsg, gateAtom);
   }
 
   // ─── Filter ───────────────────────────────────────

@@ -137,4 +137,36 @@ describe("parsePatch", () => {
       expect(patch.root.nodes[0].type).toBe("msg");
     });
   });
+
+  describe("array data (#A)", () => {
+    it("parses #A data and attaches to last array node", () => {
+      const text = `#N canvas 0 0 800 600 12;
+#X array myArray 100 float 0;
+#A 0 0.1 0.2 0.3 0.4 0.5;`;
+      const patch = parsePatch(text);
+      // Array node should exist and raw should contain #A data
+      const arrayNode = patch.root.nodes.find((n) => n.type === "array");
+      expect(arrayNode).toBeDefined();
+      expect(arrayNode!.raw).toContain("#A 0");
+    });
+  });
+
+  describe("subpatch restore with name", () => {
+    it("parses subpatch name from #X restore line", () => {
+      const text = `#N canvas 0 0 800 600 12;
+#N canvas 100 100 400 300 mySubpatch 0;
+#X obj 50 50 osc~ 440;
+#X obj 50 100 dac~;
+#X connect 0 0 1 0;
+#X restore 200 200 pd mySubpatch;`;
+      const patch = parsePatch(text);
+      // Root should have a subpatch
+      expect(patch.root.subpatches.length).toBe(1);
+      expect(patch.root.subpatches[0].name).toBe("mySubpatch");
+      // Root should have a pd node referencing the subpatch
+      const pdNode = patch.root.nodes.find((n) => n.name === "pd");
+      expect(pdNode).toBeDefined();
+      expect(pdNode!.args).toEqual(["mySubpatch"]);
+    });
+  });
 });

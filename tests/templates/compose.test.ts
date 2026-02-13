@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { compose } from "../../src/templates/modules/compose.js";
+import { compose, autoLayout } from "../../src/templates/modules/compose.js";
 import type { ModuleResult, ModuleWire } from "../../src/templates/modules/types.js";
+import type { PatchNodeSpec } from "../../src/core/serializer.js";
 import { buildPatch } from "../../src/core/serializer.js";
 import { parsePatch } from "../../src/core/parser.js";
 
@@ -95,5 +96,45 @@ describe("compose()", () => {
     // Internal connection: was 0→1, stays 0→1
     const conn = spec.connections.find((c) => c.from === 0 && c.to === 1);
     expect(conn).toBeDefined();
+  });
+});
+
+describe("autoLayout()", () => {
+  it("assigns x and y to nodes without positions", () => {
+    const nodes: PatchNodeSpec[] = [
+      { type: "obj", name: "osc~" },
+      { type: "obj", name: "dac~" },
+    ];
+    autoLayout(nodes);
+    expect(nodes[0].x).toBeDefined();
+    expect(nodes[0].y).toBeDefined();
+    expect(nodes[1].x).toBeDefined();
+    expect(nodes[1].y).toBeDefined();
+    // Second node should be below the first
+    expect(nodes[1].y!).toBeGreaterThan(nodes[0].y!);
+  });
+
+  it("preserves existing x/y when set", () => {
+    const nodes: PatchNodeSpec[] = [
+      { type: "obj", name: "osc~", x: 200, y: 300 },
+      { type: "obj", name: "dac~" },
+    ];
+    autoLayout(nodes);
+    expect(nodes[0].x).toBe(200);
+    expect(nodes[0].y).toBe(300);
+    expect(nodes[1].x).toBeDefined();
+    expect(nodes[1].y).toBeDefined();
+  });
+
+  it("accepts custom startY, spacingY, x", () => {
+    const nodes: PatchNodeSpec[] = [
+      { type: "obj", name: "a" },
+      { type: "obj", name: "b" },
+    ];
+    autoLayout(nodes, 100, 50, 75);
+    expect(nodes[0].x).toBe(75);
+    expect(nodes[0].y).toBe(100);
+    expect(nodes[1].x).toBe(75);
+    expect(nodes[1].y).toBe(150);
   });
 });

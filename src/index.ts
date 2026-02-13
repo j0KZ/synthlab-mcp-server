@@ -22,6 +22,8 @@ import { executeSendMessage } from "./tools/control.js";
 import { sendMessageSchema } from "./schemas/control.js";
 import { executeGenerateVcv, formatVcvResult } from "./tools/vcv.js";
 import { generateVcvSchema } from "./schemas/vcv.js";
+import { executeComposePatch } from "./tools/compose.js";
+import { composePatchSchema } from "./schemas/compose.js";
 
 const server = new McpServer({
   name: "puredata-mcp-server",
@@ -310,6 +312,68 @@ server.tool(
       };
     }
   },
+);
+
+// ---------------------------------------------------------------------------
+// Tool: compose_patch
+// ---------------------------------------------------------------------------
+
+server.tool(
+  "compose_patch",
+  "Compose a complete musical Pd patch from a high-level song description. " +
+    "Specify a genre and the system auto-generates a full rack: instruments, drums, sequencers, mixer, effects, and wiring. " +
+    "Genres: ambient, techno, house, dnb, experimental, idm, minimal, drone, noise. " +
+    "Moods: dark, bright, aggressive, chill, ethereal, melancholic, energetic. " +
+    "Instrument roles: lead, bass, pad, drums, arpeggio, sequence, texture, modulator. " +
+    "Each role auto-selects appropriate templates (e.g. lead → sequencer + synth, texture → noise synth + granular). " +
+    "The complete .pd content is ALWAYS returned in the response — present it directly to the user. " +
+    "STOP after presenting the result. Do NOT run bash, ls, mkdir, cat, cp, mv, or ANY file/shell operations after this tool. " +
+    "Do NOT attempt additional file operations — everything is already handled.",
+  composePatchSchema,
+  async (params) => {
+    try {
+      const result = await executeComposePatch(params as Record<string, unknown>);
+      return { content: [{ type: "text", text: result }] };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: `Error composing patch: ${msg}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Prompt: song_analysis
+// ---------------------------------------------------------------------------
+
+server.prompt(
+  "song_analysis",
+  "Guided conversation to design a song and generate a Pd patch.",
+  () => ({
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: `You are a music production assistant helping the user design a Pure Data patch. Guide them through these questions in a conversational, Socratic way — ask one or two at a time, not all at once:
+
+1. **Genre** — What style of music? (ambient, techno, house, dnb, experimental, idm, minimal, drone, noise)
+2. **Mood** — What feeling? (dark, bright, aggressive, chill, ethereal, melancholic, energetic)
+3. **Tempo** — How fast? (each genre has a natural range, suggest one)
+4. **Key** — What musical key? (suggest one based on genre/mood)
+5. **Instruments** — What instruments? (lead, bass, pad, drums, arpeggio, sequence, texture, modulator)
+6. **Effects** — What processing? (reverb, granular, or both)
+7. **Controller** — Any MIDI hardware? (k2, microfreak, tr-8s, or none)
+
+After gathering enough information, call the compose_patch tool with the user's choices. Use genre defaults for anything the user doesn't specify — don't force them to answer every question.
+
+Start by asking about the genre and mood.`,
+        },
+      },
+    ],
+  }),
 );
 
 // ---------------------------------------------------------------------------

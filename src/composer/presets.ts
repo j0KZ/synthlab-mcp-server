@@ -1,0 +1,141 @@
+/**
+ * Genre presets — data-driven defaults for each genre.
+ * Add new genres by adding entries to GENRE_PRESETS.
+ */
+
+import type { Genre, GenrePreset } from "./types.js";
+
+export const GENRE_PRESETS: Record<Genre, GenrePreset> = {
+  ambient: {
+    tempo: 70,
+    tempoRange: [40, 100],
+    defaultInstruments: [
+      { role: "pad" },
+      { role: "texture" },
+    ],
+    defaultEffects: ["reverb"],
+    defaultKey: { root: "D", scale: "minor" },
+    defaultMood: "ethereal",
+    synthDefaults: { waveform: "sine", filter: "lowpass", cutoff: 800, amplitude: 0.25 },
+    drumDefaults: { voices: ["bd", "hh"], tune: 0.3, decay: 0.7, tone: 0.3, amplitude: 0.2 },
+    clockDivisions: [1, 2, 4],
+  },
+  techno: {
+    tempo: 130,
+    tempoRange: [120, 150],
+    defaultInstruments: [
+      { role: "drums" },
+      { role: "bass" },
+      { role: "lead" },
+    ],
+    defaultEffects: ["reverb"],
+    defaultKey: { root: "A", scale: "minor" },
+    defaultMood: "dark",
+    synthDefaults: { waveform: "saw", filter: "lowpass", cutoff: 2000, amplitude: 0.3 },
+    drumDefaults: { voices: ["bd", "sn", "hh", "cp"], tune: 0.5, decay: 0.4, tone: 0.5, amplitude: 0.5 },
+    clockDivisions: [1, 4, 8],
+  },
+  house: {
+    tempo: 124,
+    tempoRange: [118, 132],
+    defaultInstruments: [
+      { role: "drums" },
+      { role: "bass" },
+      { role: "pad" },
+    ],
+    defaultEffects: ["reverb"],
+    defaultKey: { root: "C", scale: "minor" },
+    defaultMood: "energetic",
+    synthDefaults: { waveform: "saw", filter: "lowpass", cutoff: 3000, amplitude: 0.3 },
+    drumDefaults: { voices: ["bd", "sn", "hh", "cp"], tune: 0.6, decay: 0.5, tone: 0.6, amplitude: 0.5 },
+    clockDivisions: [1, 2, 4, 8],
+  },
+  dnb: {
+    tempo: 174,
+    tempoRange: [160, 185],
+    defaultInstruments: [
+      { role: "drums" },
+      { role: "bass" },
+      { role: "lead" },
+    ],
+    defaultEffects: ["reverb"],
+    defaultKey: { root: "E", scale: "minor" },
+    defaultMood: "aggressive",
+    synthDefaults: { waveform: "saw", filter: "lowpass", cutoff: 4000, amplitude: 0.35 },
+    drumDefaults: { voices: ["bd", "sn", "hh"], tune: 0.7, decay: 0.3, tone: 0.7, amplitude: 0.6 },
+    clockDivisions: [1, 2, 4, 8],
+  },
+  experimental: {
+    tempo: 100,
+    tempoRange: [40, 200],
+    defaultInstruments: [
+      { role: "modulator" },
+      { role: "texture" },
+      { role: "sequence" },
+    ],
+    defaultEffects: ["reverb", "granular"],
+    defaultKey: { root: "C", scale: "chromatic" },
+    defaultMood: "dark",
+    synthDefaults: { waveform: "noise", filter: "bandpass", cutoff: 1500, amplitude: 0.3 },
+    drumDefaults: { voices: ["bd", "hh"], tune: 0.2, decay: 0.8, tone: 0.2, amplitude: 0.3 },
+    clockDivisions: [1, 3, 5, 7],
+  },
+  idm: {
+    tempo: 140,
+    tempoRange: [80, 180],
+    defaultInstruments: [
+      { role: "drums" },
+      { role: "arpeggio" },
+      { role: "modulator" },
+    ],
+    defaultEffects: ["reverb"],
+    defaultKey: { root: "F#", scale: "dorian" },
+    defaultMood: "ethereal",
+    synthDefaults: { waveform: "square", filter: "moog", cutoff: 2500, amplitude: 0.25 },
+    drumDefaults: { voices: ["bd", "sn", "hh", "cp"], tune: 0.4, decay: 0.5, tone: 0.4, amplitude: 0.4 },
+    clockDivisions: [1, 3, 4, 7],
+  },
+  minimal: {
+    tempo: 125,
+    tempoRange: [118, 135],
+    defaultInstruments: [
+      { role: "drums" },
+      { role: "bass" },
+    ],
+    defaultEffects: ["reverb"],
+    defaultKey: { root: "A", scale: "minor" },
+    defaultMood: "chill",
+    synthDefaults: { waveform: "sine", filter: "lowpass", cutoff: 1200, amplitude: 0.25 },
+    drumDefaults: { voices: ["bd", "hh"], tune: 0.5, decay: 0.3, tone: 0.5, amplitude: 0.4 },
+    clockDivisions: [1, 4],
+  },
+  drone: {
+    tempo: 40,
+    tempoRange: [20, 80],
+    defaultInstruments: [
+      { role: "pad" },
+      { role: "pad", id: "pad2" },
+    ],
+    defaultEffects: ["reverb"],
+    defaultKey: { root: "D", scale: "pentatonic-minor" },
+    defaultMood: "melancholic",
+    synthDefaults: { waveform: "sine", filter: "lowpass", cutoff: 500, amplitude: 0.2 },
+    drumDefaults: { voices: ["bd"], tune: 0.2, decay: 0.9, tone: 0.1, amplitude: 0.15 },
+    clockDivisions: [1],
+  },
+  noise: {
+    tempo: 120,
+    tempoRange: [60, 200],
+    defaultInstruments: [
+      { role: "texture" },
+      { role: "modulator" },
+      { role: "drums" },
+    ],
+    defaultEffects: ["reverb"],
+    defaultKey: { root: "C", scale: "chromatic" },
+    defaultMood: "aggressive",
+    synthDefaults: { waveform: "noise", filter: "bandpass", cutoff: 3000, amplitude: 0.4 },
+    drumDefaults: { voices: ["bd", "sn", "hh", "cp"], tune: 0.8, decay: 0.2, tone: 0.8, amplitude: 0.6 },
+    clockDivisions: [1, 2, 4, 8],
+  },
+};

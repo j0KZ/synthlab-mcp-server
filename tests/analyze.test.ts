@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { analyzePatch } from "../src/tools/analyze.js";
+import { analyzePatch, formatAnalysis, executeAnalyzePatch } from "../src/tools/analyze.js";
 import { parsePatch } from "../src/core/parser.js";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -164,6 +164,158 @@ describe("analyzer", () => {
       const result = await loadAndAnalyze("broken-connections.pd");
       expect(result.validation.valid).toBe(false);
       expect(result.validation.summary.errors).toBeGreaterThan(0);
+    });
+  });
+
+  describe("formatAnalysis", () => {
+    it("formats analysis with file path", () => {
+      const result = analyzeRaw(`#N canvas 0 50 800 600 12;
+#X obj 50 50 osc~ 440;
+#X obj 50 100 *~ 0.1;
+#X obj 50 150 dac~;
+#X connect 0 0 1 0;
+#X connect 1 0 2 0;
+`);
+      result.filePath = "/tmp/test.pd";
+      const text = formatAnalysis(result);
+      expect(text).toContain("# Analysis: test.pd");
+      expect(text).toContain("Path: /tmp/test.pd");
+      expect(text).toContain("## Overview");
+      expect(text).toContain("## Objects by Category");
+      expect(text).toContain("## Signal Flow");
+      expect(text).toContain("## DSP Chains");
+      expect(text).toContain("## Complexity Breakdown");
+      expect(text).toContain("## Validation");
+    });
+
+    it("formats analysis without file path", () => {
+      const result = analyzeRaw(`#N canvas 0 50 800 600 12;
+#X obj 50 50 metro 500;
+#X obj 50 100 print;
+#X connect 0 0 1 0;
+`);
+      const text = formatAnalysis(result);
+      expect(text).toContain("# Patch Analysis");
+      expect(text).toContain("No audio chains detected");
+    });
+
+    it("formats cycles in signal flow", () => {
+      const result = analyzeRaw(`#N canvas 0 50 800 600 12;
+#X obj 50 50 osc~ 440;
+#X obj 50 100 +~;
+#X connect 0 0 1 0;
+#X connect 1 0 0 0;
+`);
+      const text = formatAnalysis(result);
+      expect(text).toContain("Cycles detected");
+    });
+
+    it("formats topological order when no cycles", () => {
+      const result = analyzeRaw(`#N canvas 0 50 800 600 12;
+#X obj 50 50 osc~ 440;
+#X obj 50 100 dac~;
+#X connect 0 0 1 0;
+`);
+      const text = formatAnalysis(result);
+      expect(text).toContain("Topological order:");
+    });
+
+    it("formats DSP chain names", () => {
+      const result = analyzeRaw(`#N canvas 0 50 800 600 12;
+#X obj 50 50 osc~ 440;
+#X obj 50 100 *~ 0.1;
+#X obj 50 150 dac~;
+#X connect 0 0 1 0;
+#X connect 1 0 2 0;
+`);
+      const text = formatAnalysis(result);
+      expect(text).toMatch(/osc~.*→.*dac~/);
+    });
+
+    it("formats valid patch validation", () => {
+      const result = analyzeRaw(`#N canvas 0 50 800 600 12;
+#X obj 50 50 osc~ 440;
+#X obj 50 100 dac~;
+#X connect 0 0 1 0;
+`);
+      const text = formatAnalysis(result);
+      expect(text).toContain("**VALID**");
+    });
+
+    it("formats invalid patch validation with issues", async () => {
+      const result = await loadAndAnalyze("broken-connections.pd");
+      const text = formatAnalysis(result);
+      expect(text).toContain("**INVALID**");
+      expect(text).toContain("[ERROR]");
+    });
+
+    it("formats complexity labels and factor breakdown", () => {
+      const result = analyzeRaw(`#N canvas 0 50 800 600 12;
+#X obj 50 50 osc~ 440;
+#X obj 50 100 dac~;
+#X connect 0 0 1 0;
+`);
+      const text = formatAnalysis(result);
+      expect(text).toContain("Objects:");
+      expect(text).toContain("Density:");
+      expect(text).toContain("Depth:");
+      expect(text).toContain("Audio:");
+      expect(text).toContain("Variety:");
+    });
+  });
+
+  describe("executeAnalyzePatch", () => {
+    it("analyzes raw Pd text", async () => {
+      const text = await executeAnalyzePatch(`#N canvas 0 50 800 600 12;
+#X obj 50 50 osc~ 440;
+#X obj 50 100 dac~;
+#X connect 0 0 1 0;
+`);
+      expect(text).toContain("# Patch Analysis");
+      expect(text).toContain("## Overview");
+    });
+
+    it("analyzes fixture file path", async () => {
+      const fixturePath = path.join(FIXTURES, "hello-world.pd");
+      const text = await executeAnalyzePatch(fixturePath);
+      expect(text).toContain("# Analysis: hello-world.pd");
+    });
+  });
+
+  describe("complexity labels", () => {
+    it("classifies moderate complexity", () => {
+      // Build a patch with ~20 objects and several connections
+      const lines = ["#N canvas 0 50 800 600 12;"];
+      for (let i = 0; i < 15; i++) {
+        lines.push(`#X obj ${50 + i * 30} 50 osc~ ${440 + i};`);
+      }
+      for (let i = 0; i < 15; i++) {
+        lines.push(`#X obj ${50 + i * 30} 100 *~ 0.1;`);
+      }
+      lines.push("#X obj 50 150 dac~;");
+      // Connect osc→*~ and *~→dac
+      for (let i = 0; i < 15; i++) {
+        lines.push(`#X connect ${i} 0 ${i + 15} 0;`);
+        lines.push(`#X connect ${i + 15} 0 30 0;`);
+      }
+      const result = analyzeRaw(lines.join("\n"));
+      expect(result.complexity.score).toBeGreaterThan(35);
+      expect(["moderate", "complex", "very complex"]).toContain(
+        result.complexity.label,
+      );
+    });
+  });
+
+  describe("object category counting", () => {
+    it("counts message and atom nodes", () => {
+      const result = analyzeRaw(`#N canvas 0 50 800 600 12;
+#X msg 50 50 hello;
+#X floatatom 50 100 5 0 0 0 - - -;
+#X text 50 150 this is a comment;
+`);
+      expect(result.objectCounts["message"]).toBe(1);
+      expect(result.objectCounts["atom"]).toBe(1);
+      expect(result.objectCounts["comment"]).toBe(1);
     });
   });
 });
