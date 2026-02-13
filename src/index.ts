@@ -21,7 +21,8 @@ import { createRackSchema } from "./schemas/rack.js";
 import { executeSendMessage } from "./tools/control.js";
 import { sendMessageSchema } from "./schemas/control.js";
 import { executeGenerateVcv, formatVcvResult } from "./tools/vcv.js";
-import { generateVcvSchema } from "./schemas/vcv.js";
+import { generateVcvSchema, listVcvModulesSchema } from "./schemas/vcv.js";
+import { executeListVcvModules } from "./tools/list-vcv.js";
 import { executeComposePatch } from "./tools/compose.js";
 import { composePatchSchema } from "./schemas/compose.js";
 
@@ -287,6 +288,35 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool: list_vcv_modules
+// ---------------------------------------------------------------------------
+
+server.tool(
+  "list_vcv_modules",
+  "List available VCV Rack modules and their ports/params for a given plugin. " +
+    "Call with just a plugin name to see all module slugs, tags, and HP widths. " +
+    "Call with plugin + module to see exact input/output port names and param names for cabling. " +
+    "ALWAYS call this BEFORE generate_vcv to look up correct module slugs and port names — do NOT guess. " +
+    "Supported plugins: Core, Fundamental, AudibleInstruments (aliases: mi, mutable), " +
+    "Befaco, Bogaudio (bg), CountModula, ImpromptuModular (impromptu), Valley, " +
+    "Stoermelder PackOne (stoermelder, p1), ML Modules (ml), VCV Recorder (recorder), " +
+    "Prism, GlueTheGiant (gtg), OrangeLine, StudioSixPlusOne (s6).",
+  listVcvModulesSchema,
+  async ({ plugin, module: mod }) => {
+    try {
+      const result = executeListVcvModules({ plugin, module: mod });
+      return { content: [{ type: "text", text: result }] };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: `Error listing VCV modules: ${msg}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Tool: generate_vcv
 // ---------------------------------------------------------------------------
 
@@ -294,6 +324,7 @@ server.tool(
   "generate_vcv",
   "Generate a VCV Rack .vcv patch file from a JSON specification of modules and cables. " +
     "Uses a registry of module port/param IDs scraped from C++ source. " +
+    "IMPORTANT: Use list_vcv_modules first to look up exact module slugs and port names — do NOT guess. " +
     "Supported plugins (15): Core, Fundamental, AudibleInstruments (Mutable Instruments), Befaco, Bogaudio, CountModula, ImpromptuModular, Valley, Stoermelder PackOne, ML Modules, VCV Recorder, Prism, GlueTheGiant, OrangeLine, StudioSixPlusOne. " +
     "The complete .vcv file content is ALWAYS returned in the response — present it directly to the user. " +
     "STOP after presenting the result. Do NOT run bash, ls, mkdir, cat, cp, mv, or ANY file/shell operations after this tool. " +
@@ -321,14 +352,16 @@ server.tool(
 server.tool(
   "compose_patch",
   "Compose a complete musical Pd patch from a high-level song description. " +
-    "Specify a genre and the system auto-generates a full rack: instruments, drums, sequencers, mixer, effects, and wiring. " +
+    "Before calling this tool, ask the user about genre, mood, tempo, key, instruments, and effects — " +
+    "use the song_analysis prompt as a guide. Only call this tool once you have enough info. " +
     "Genres: ambient, techno, house, dnb, experimental, idm, minimal, drone, noise. " +
     "Moods: dark, bright, aggressive, chill, ethereal, melancholic, energetic. " +
     "Instrument roles: lead, bass, pad, drums, arpeggio, sequence, texture, modulator. " +
     "Each role auto-selects appropriate templates (e.g. lead → sequencer + synth, texture → noise synth + granular). " +
-    "The complete .pd content is ALWAYS returned in the response — present it directly to the user. " +
+    "IMPORTANT: The complete .pd content is ALWAYS returned in the response — present it directly to the user as code blocks. " +
     "STOP after presenting the result. Do NOT run bash, ls, mkdir, cat, cp, mv, or ANY file/shell operations after this tool. " +
-    "Do NOT attempt additional file operations — everything is already handled.",
+    "Do NOT try to save, create, write, or verify files — NEVER use artifacts or file downloads. " +
+    "Everything is already in the response text. Just show the content to the user as-is.",
   composePatchSchema,
   async (params) => {
     try {

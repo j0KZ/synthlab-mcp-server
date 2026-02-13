@@ -12,6 +12,8 @@ import { vcvPlugins } from "./registry/index.js";
 // ---------------------------------------------------------------------------
 
 const PLUGIN_ALIASES: Record<string, string> = {
+  // Mutable Instruments alternative name
+  "mutable instruments": "audibleinstruments",
   vcv: "fundamental",
   mutable: "audibleinstruments",
   mi: "audibleinstruments",
@@ -43,8 +45,42 @@ export function getVcvPlugin(name: string): VcvPluginRegistry {
   return plugin;
 }
 
+// ---------------------------------------------------------------------------
+// Module aliases — common LLM guesses → correct registry slugs.
+// Key format: "pluginkey:alias" (all lowercase).
+// ---------------------------------------------------------------------------
+
+const MODULE_ALIASES: Record<string, { plugin: string; model: string }> = {
+  // Mutable Instruments (hardware function names → VCV codenames)
+  "audibleinstruments:macro_oscillator": { plugin: "audibleinstruments", model: "Braids" },
+  "audibleinstruments:macro_oscillator_2": { plugin: "audibleinstruments", model: "Plaits" },
+  "audibleinstruments:macro_oscillator2": { plugin: "audibleinstruments", model: "Plaits" },
+  "audibleinstruments:modal_synthesizer": { plugin: "audibleinstruments", model: "Elements" },
+  "audibleinstruments:tidal_modulator": { plugin: "audibleinstruments", model: "Tides" },
+  "audibleinstruments:tidal_modulator_2": { plugin: "audibleinstruments", model: "Tides2" },
+  "audibleinstruments:tidal_modulator2": { plugin: "audibleinstruments", model: "Tides2" },
+  "audibleinstruments:texture_synthesizer": { plugin: "audibleinstruments", model: "Clouds" },
+  "audibleinstruments:spectrum_processor": { plugin: "audibleinstruments", model: "Warps" },
+  "audibleinstruments:resonator": { plugin: "audibleinstruments", model: "Rings" },
+  "audibleinstruments:bernoulli_gate": { plugin: "audibleinstruments", model: "Branches" },
+  "audibleinstruments:segment_generator": { plugin: "audibleinstruments", model: "Stages" },
+  "audibleinstruments:random_sampler": { plugin: "audibleinstruments", model: "Marbles" },
+  "audibleinstruments:liquid_filter": { plugin: "audibleinstruments", model: "Ripples" },
+  "audibleinstruments:parasites": { plugin: "audibleinstruments", model: "Clouds" },
+  // Fundamental (common LLM suffixed guesses)
+  "fundamental:lfo-1": { plugin: "fundamental", model: "LFO" },
+  "fundamental:lfo_1": { plugin: "fundamental", model: "LFO" },
+  "fundamental:lfo1": { plugin: "fundamental", model: "LFO" },
+  "fundamental:vco-1": { plugin: "fundamental", model: "VCO" },
+  "fundamental:vco_1": { plugin: "fundamental", model: "VCO" },
+  "fundamental:vco1": { plugin: "fundamental", model: "VCO" },
+  "fundamental:vcf-1": { plugin: "fundamental", model: "VCF" },
+  "fundamental:vcf_1": { plugin: "fundamental", model: "VCF" },
+  "fundamental:vcf1": { plugin: "fundamental", model: "VCF" },
+};
+
 /**
- * Get a module definition from a plugin (case-insensitive model lookup).
+ * Get a module definition from a plugin (case-insensitive model lookup + alias resolution).
  */
 export function getVcvModule(plugin: string, model: string): VcvModuleDef & { pluginName: string; pluginVersion: string } {
   const reg = getVcvPlugin(plugin);
@@ -59,6 +95,19 @@ export function getVcvModule(plugin: string, model: string): VcvModuleDef & { pl
   for (const [key, mod] of Object.entries(reg.modules)) {
     if (key.toLowerCase() === lower) {
       return { ...mod, pluginName: reg.plugin, pluginVersion: reg.version };
+    }
+  }
+
+  // Module alias resolution
+  const pluginKey = plugin.toLowerCase();
+  const resolvedPlugin = PLUGIN_ALIASES[pluginKey] ?? pluginKey;
+  const aliasKey = `${resolvedPlugin}:${lower}`;
+  const alias = MODULE_ALIASES[aliasKey];
+  if (alias) {
+    const aliasReg = getVcvPlugin(alias.plugin);
+    const mod = aliasReg.modules[alias.model];
+    if (mod) {
+      return { ...mod, pluginName: aliasReg.plugin, pluginVersion: aliasReg.version };
     }
   }
 
@@ -158,4 +207,52 @@ export function listVcvPlugins(): string[] {
 export function listVcvModules(plugin: string): string[] {
   const reg = getVcvPlugin(plugin);
   return Object.keys(reg.modules);
+}
+
+/**
+ * Format a compact module listing for a plugin (slug + tags + hp).
+ */
+export function formatModuleListing(plugin: string): string {
+  const reg = getVcvPlugin(plugin);
+  const entries = Object.entries(reg.modules);
+  const lines = entries.map(
+    ([slug, mod]) => `${slug} — [${mod.tags.join(", ")}] — ${mod.hp}hp`,
+  );
+  return `# ${reg.plugin} v${reg.version} (${entries.length} modules)\n\n${lines.join("\n")}`;
+}
+
+/**
+ * Format detailed module info (ports, params) for a specific module.
+ */
+export function formatModuleDetail(plugin: string, model: string): string {
+  const mod = getVcvModule(plugin, model);
+  const lines: string[] = [];
+
+  lines.push(`# ${mod.pluginName} v${mod.pluginVersion} / ${mod.name} (${mod.hp}hp)`);
+  lines.push(`Tags: ${mod.tags.join(", ")}`);
+  lines.push("");
+
+  if (mod.inputs.length > 0) {
+    const ports = mod.inputs.map((p) => `${p.label} (${p.name})`);
+    lines.push(`Inputs: ${ports.join(", ")}`);
+  }
+
+  if (mod.outputs.length > 0) {
+    const ports = mod.outputs.map((p) => `${p.label} (${p.name})`);
+    lines.push(`Outputs: ${ports.join(", ")}`);
+  }
+
+  if (mod.params.length > 0) {
+    const params = mod.params
+      .filter((p) => !p.removed)
+      .map((p) => {
+        const range = p.min !== undefined && p.max !== undefined
+          ? ` [${p.min}..${p.max}${p.default !== undefined ? `, default ${p.default}` : ""}]`
+          : "";
+        return `${p.label} (${p.name})${range}`;
+      });
+    lines.push(`Params: ${params.join(", ")}`);
+  }
+
+  return lines.join("\n");
 }

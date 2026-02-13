@@ -23,7 +23,8 @@
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run build && npm run lint && npm test",
-    "vcv:build-registry": "tsx scripts/build-vcv-registry.ts"
+    "vcv:build-registry": "tsx scripts/build-vcv-registry.ts",
+    "update-stats": "tsx scripts/update-readme-stats.ts"
   },
   "keywords": [
     "mcp",

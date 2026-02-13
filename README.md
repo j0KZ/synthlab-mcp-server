@@ -11,7 +11,7 @@
 
 ## What is this?
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives AI assistants deep understanding of [Pure Data](https://puredata.info/) and [VCV Rack](https://vcvrack.com/) patches. 9 tools + 1 prompt, 580 tests, zero runtime dependencies beyond MCP SDK + Zod.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives AI assistants deep understanding of [Pure Data](https://puredata.info/) and [VCV Rack](https://vcvrack.com/) patches. 10 tools + 1 prompt, 611 tests, zero runtime dependencies beyond MCP SDK + Zod.
 
 **Pure Data** — compose full songs from genre descriptions, parse `.pd` files into typed ASTs, generate patches from specs, analyze signal flow, template 11 instruments, assemble multi-module racks with inter-module wiring, map MIDI hardware, send OSC/FUDI in real time.
 
@@ -35,11 +35,12 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that 
 +----------------------------v---------------------------------------+
 |                    puredata-mcp-server                              |
 |                                                                    |
-|  9 MCP Tools + 1 Prompt                                            |
+|  10 MCP Tools + 1 Prompt                                           |
 |  +------------------+  +------------------+  +------------------+  |
 |  |   parse_patch    |  |  generate_patch  |  |  analyze_patch   |  |
 |  |  validate_patch  |  | create_template  |  |   create_rack    |  |
-|  |  send_message    |  |   generate_vcv   |  |  compose_patch   |  |
+|  |  send_message    |  | list_vcv_modules |  |   generate_vcv   |  |
+|  |  compose_patch   |  |                  |  |                  |  |
 |  +--------+---------+  +--------+---------+  +--------+---------+  |
 |           |                     |                      |           |
 |  +--------v---------------------v----------------------v---------+ |
@@ -440,6 +441,16 @@ Send a control message to a running Pd instance via OSC or FUDI.
 | `address` | `string` | Message address (e.g. `/pd/tempo`) |
 | `args` | `array?` | Message arguments (numbers or strings) |
 
+### `list_vcv_modules`
+Discover available VCV Rack modules, ports, and params before building a patch.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `plugin` | `string` | Plugin name or alias (`"Fundamental"`, `"mi"`, `"bg"`) |
+| `module` | `string?` | Module slug for detailed port/param info. Omit to list all modules |
+
+Call with just `plugin` to get all module slugs with tags and HP. Call with `plugin` + `module` to get exact input/output port names and param names for cabling. Includes plugin version for freshness tracking.
+
 ### `generate_vcv`
 Generate a VCV Rack `.vcv` patch file from module and cable specifications.
 
@@ -462,7 +473,7 @@ Guided Socratic conversation to design a song step by step (genre → mood → t
 
 ```
 src/                            # ~9,500 lines (+ 42,800 registry data)
-  index.ts                      # MCP server — 9 tools + 1 prompt, stdio transport
+  index.ts                      # MCP server — 10 tools + 1 prompt, stdio transport
   types.ts                      # PdPatch, PdCanvas, PdNode, PdConnection
   constants.ts                  # Format constants, layout defaults
   core/
@@ -484,7 +495,7 @@ src/                            # ~9,500 lines (+ 42,800 registry data)
     rack.ts                     # Zod schema for create_rack
     control.ts                  # Zod schema for send_message
     compose.ts                  # Zod schema for compose_patch
-    vcv.ts                      # Zod schema for generate_vcv
+    vcv.ts                      # Zod schemas for list_vcv_modules + generate_vcv
   templates/
     index.ts                    # Template registry + dispatcher (11 templates)
     port-info.ts                # PortInfo, RackableSpec types for wiring
@@ -550,18 +561,20 @@ src/                            # ~9,500 lines (+ 42,800 registry data)
     rack.ts                     # create_rack + combined patch builder
     compose.ts                  # compose_patch tool handler
     control.ts                  # send_message tool handler
+    list-vcv.ts                 # list_vcv_modules tool handler (discovery)
     vcv.ts                      # generate_vcv tool handler
   wiring/
     bus-injector.ts             # Inter-module wiring (throw~/catch~, send/receive)
   utils/
     resolve-source.ts           # File-path vs raw-text resolver
 
-scripts/                        # ~620 lines
+scripts/                        # ~700 lines
   build-vcv-registry.ts         # Clone repos -> parse C++ -> generate .ts
   parse-cpp-enums.ts            # C++ enum parser (ParamIds, InputIds, etc.)
   parse-svg-width.ts            # SVG panel width -> HP conversion
+  update-readme-stats.ts        # Auto-update README tool/test counts
 
-tests/                          # 580 tests, ~6,500 lines
+tests/                          # 611 tests, ~6,500 lines
   parser.test.ts                # 14 — parsing, subpatches, arrays, edge cases
   serializer.test.ts            # 8 — round-trip, spec builder, escaping
   object-registry.test.ts       # 37 — port counts, aliases, variable objects
@@ -586,12 +599,13 @@ tests/                          # 580 tests, ~6,500 lines
     rack.test.ts                # 13 — rack assembly, layout, file writing
     rack-wiring.test.ts         # 13 — wiring integration, bus injection
     compose.test.ts             # 14 — compose_patch tool, genres, validation, coercion
+    list-vcv.test.ts            # 9 — discovery tool, aliases, coercion
     vcv.test.ts                 # 8 — tool handler, format, sanitization
   utils/
     resolve-source.test.ts      # 5 — raw text vs file path resolution
   vcv/
     generator.test.ts           # 15 — modules, cables, positions, errors
-    registry.test.ts            # 31 — 15 plugins, aliases, fuzzy resolution
+    registry.test.ts            # 53 — 15 plugins, module aliases, fuzzy resolution, formatting
     positioner.test.ts          # 5 — HP layout, adjacency chain
     validate-vcv-params.test.ts # 8 — coercion, empty arrays, booleans
   scripts/
@@ -615,7 +629,7 @@ tests/                          # 580 tests, ~6,500 lines
 ```bash
 npm run build        # Compile with tsup (ESM + declarations)
 npm run dev          # Watch mode
-npm run test         # Run vitest (580 tests)
+npm run test         # Run vitest (611 tests)
 npm run lint         # Type-check with tsc --noEmit
 npm run inspect      # Test server with MCP Inspector
 ```
@@ -627,6 +641,12 @@ npm run vcv:build-registry   # Clone repos -> parse C++ -> regenerate src/vcv/re
 npm run build                # Rebundle
 ```
 
+### Update README stats (tool/test counts)
+
+```bash
+npm run update-stats         # Patches README with actual tool + test counts
+```
+
 ---
 
 ## Tech Stack
@@ -636,7 +656,7 @@ npm run build                # Rebundle
 | **TypeScript** (strict mode) | Type-safe parser and serializer |
 | **MCP SDK** (`@modelcontextprotocol/sdk`) | Protocol implementation |
 | **Zod** | Runtime input validation |
-| **Vitest** | Test runner (580 tests) |
+| **Vitest** | Test runner (611 tests) |
 | **tsup** | Bundler (ESM output, 1.04 MB) |
 | **tsx** | TypeScript execution for build scripts |
 | **Zero runtime deps** beyond MCP SDK + Zod | OSC via `dgram`, FUDI via `net` |
@@ -654,7 +674,7 @@ All phases complete.
 5. **Wiring** — Inter-module buses (throw~/catch~, send/receive, clock sync)
 6. **MIDI Controllers** — K2, MicroFreak, TR-8S profiles with auto-mapping
 7. **Live Control** — OSC/FUDI messaging (`send_message` tool + `bridge` template)
-8. **VCV Rack** — `.vcv` patch generation with 15-plugin registry (~400 modules)
+8. **VCV Rack** — `.vcv` generation with 15-plugin registry (~500 modules), module discovery + aliases
 9. **Song Composer** — `compose_patch` tool + `song_analysis` Socratic prompt
 
 ---

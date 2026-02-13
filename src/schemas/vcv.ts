@@ -1,5 +1,5 @@
 /**
- * Zod schemas for generate_vcv tool parameters.
+ * Zod schemas for VCV Rack tool parameters.
  */
 
 import { z } from "zod";
@@ -70,5 +70,21 @@ export const generateVcvSchema = {
       "Optional ABSOLUTE file path to write the .vcv file. " +
         "Only use if the user explicitly requests saving to a specific path. " +
         "The .vcv content is always returned in the response regardless.",
+    ),
+};
+
+export const listVcvModulesSchema = {
+  plugin: z
+    .string()
+    .describe(
+      "Plugin name or alias (e.g. 'Fundamental', 'mi', 'Bogaudio', 'bg'). " +
+        "Use 'mi' or 'AudibleInstruments' for Mutable Instruments clones.",
+    ),
+  module: z
+    .string()
+    .optional()
+    .describe(
+      "Module slug to get detailed port/param info (e.g. 'VCO', 'Clouds'). " +
+        "Omit to list all modules in the plugin.",
     ),
 };

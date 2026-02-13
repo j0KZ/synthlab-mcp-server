@@ -6,6 +6,8 @@ import {
   resolveParam,
   listVcvPlugins,
   listVcvModules,
+  formatModuleListing,
+  formatModuleDetail,
 } from "../../src/vcv/registry.js";
 
 describe("getVcvPlugin", () => {
@@ -195,5 +197,139 @@ describe("expanded registry — new plugins", () => {
   it("resolves Bogaudio alias 'bg'", () => {
     const p = getVcvPlugin("bg");
     expect(p.plugin).toBe("Bogaudio");
+  });
+});
+
+describe("module aliases — Mutable Instruments", () => {
+  it("resolves texture_synthesizer → Clouds", () => {
+    const mod = getVcvModule("mi", "texture_synthesizer");
+    expect(mod.name).toBe("Clouds");
+    expect(mod.pluginName).toBe("AudibleInstruments");
+  });
+
+  it("resolves tidal_modulator → Tides", () => {
+    const mod = getVcvModule("AudibleInstruments", "tidal_modulator");
+    expect(mod.name).toBe("Tides");
+  });
+
+  it("resolves tidal_modulator_2 → Tides2", () => {
+    const mod = getVcvModule("mi", "tidal_modulator_2");
+    expect(mod.name).toBe("Tides2");
+  });
+
+  it("resolves macro_oscillator → Braids", () => {
+    const mod = getVcvModule("mi", "macro_oscillator");
+    expect(mod.name).toBe("Braids");
+  });
+
+  it("resolves macro_oscillator_2 → Plaits", () => {
+    const mod = getVcvModule("mi", "macro_oscillator_2");
+    expect(mod.name).toBe("Plaits");
+  });
+
+  it("resolves modal_synthesizer → Elements", () => {
+    const mod = getVcvModule("mi", "modal_synthesizer");
+    expect(mod.name).toBe("Elements");
+  });
+
+  it("resolves spectrum_processor → Warps", () => {
+    const mod = getVcvModule("mi", "spectrum_processor");
+    expect(mod.name).toBe("Warps");
+  });
+
+  it("resolves resonator → Rings", () => {
+    const mod = getVcvModule("mi", "resonator");
+    expect(mod.name).toBe("Rings");
+  });
+
+  it("resolves bernoulli_gate → Branches", () => {
+    const mod = getVcvModule("mi", "bernoulli_gate");
+    expect(mod.name).toBe("Branches");
+  });
+
+  it("resolves random_sampler → Marbles", () => {
+    const mod = getVcvModule("mi", "random_sampler");
+    expect(mod.name).toBe("Marbles");
+  });
+
+  it("resolves segment_generator → Stages", () => {
+    const mod = getVcvModule("mi", "segment_generator");
+    expect(mod.name).toBe("Stages");
+  });
+
+  it("resolves liquid_filter → Ripples", () => {
+    const mod = getVcvModule("mi", "liquid_filter");
+    expect(mod.name).toBe("Ripples");
+  });
+});
+
+describe("module aliases — Fundamental", () => {
+  it("resolves LFO-1 → LFO", () => {
+    const mod = getVcvModule("Fundamental", "LFO-1");
+    expect(mod.name).toBe("LFO");
+  });
+
+  it("resolves VCO-1 → VCO", () => {
+    const mod = getVcvModule("Fundamental", "VCO-1");
+    expect(mod.name).toBe("VCO");
+  });
+
+  it("resolves VCF-1 → VCF", () => {
+    const mod = getVcvModule("Fundamental", "VCF-1");
+    expect(mod.name).toBe("VCF");
+  });
+
+  it("resolves lfo_1 → LFO (underscore variant)", () => {
+    const mod = getVcvModule("Fundamental", "lfo_1");
+    expect(mod.name).toBe("LFO");
+  });
+});
+
+describe("formatModuleListing", () => {
+  it("lists all modules in Fundamental with version, tags and HP", () => {
+    const result = formatModuleListing("Fundamental");
+    expect(result).toMatch(/^# Fundamental v[\d.]+ \(\d+ modules\)/);
+    expect(result).toContain("VCO");
+    expect(result).toContain("VCF");
+    expect(result).toContain("LFO");
+    expect(result).toContain("hp");
+  });
+
+  it("lists AudibleInstruments via alias with version", () => {
+    const result = formatModuleListing("mi");
+    expect(result).toMatch(/^# AudibleInstruments v[\d.]+/);
+    expect(result).toContain("Clouds");
+    expect(result).toContain("Braids");
+  });
+});
+
+describe("formatModuleDetail", () => {
+  it("shows full detail for VCO with version", () => {
+    const result = formatModuleDetail("Fundamental", "VCO");
+    expect(result).toMatch(/# Fundamental v[\d.]+ \/ VCO/);
+    expect(result).toContain("Inputs:");
+    expect(result).toContain("Outputs:");
+    expect(result).toContain("Params:");
+    expect(result).toContain("PITCH_INPUT");
+    expect(result).toContain("SIN_OUTPUT");
+    expect(result).toContain("FREQ_PARAM");
+  });
+
+  it("shows full detail for Clouds with version", () => {
+    const result = formatModuleDetail("mi", "Clouds");
+    expect(result).toMatch(/# AudibleInstruments v[\d.]+ \/ Clouds/);
+    expect(result).toContain("Inputs:");
+    expect(result).toContain("Outputs:");
+  });
+
+  it("shows param ranges", () => {
+    const result = formatModuleDetail("Fundamental", "VCO");
+    // Frequency param should have range info
+    expect(result).toMatch(/Frequency \(FREQ_PARAM\) \[/);
+  });
+
+  it("resolves alias in detail view", () => {
+    const result = formatModuleDetail("mi", "texture_synthesizer");
+    expect(result).toMatch(/# AudibleInstruments v[\d.]+ \/ Clouds/);
   });
 });
