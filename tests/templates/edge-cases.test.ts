@@ -614,17 +614,18 @@ describe("empty array coercion produces same output as defaults", () => {
     expect(coercedPd).toEqual(defaultPd);
   });
 
-  it("drum-machine: voices=[] results in all 4 default voices", () => {
+  it("drum-machine: voices=[] results in all 5 default voices", () => {
     const pd = buildPatch(buildDrumMachine({ voices: [] }).spec);
     const parsed = parsePatch(pd);
-    // Default voices: ["bd", "sn", "hh", "cp"] — each has a trigger msg "bang"
+    // Default voices: ["bd", "sn", "ch", "oh", "cp"] — each has a trigger
     // The title text should list all voices
     const titleNode = parsed.root.nodes.find(
       (n) => n.type === "text" && n.raw?.includes("BD"),
     );
     expect(titleNode).toBeDefined();
     expect(titleNode!.raw).toContain("SN");
-    expect(titleNode!.raw).toContain("HH");
+    expect(titleNode!.raw).toContain("CH");
+    expect(titleNode!.raw).toContain("OH");
     expect(titleNode!.raw).toContain("CP");
   });
 

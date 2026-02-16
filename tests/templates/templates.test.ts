@@ -171,35 +171,35 @@ describe("mixer template", () => {
 // ──────────────────────────────────────────────
 
 describe("drum-machine template", () => {
-  it("builds with defaults (4 voices)", () => {
+  it("builds with defaults (5 voices, internal clock)", () => {
     const spec = buildDrumMachine();
     const { parsed } = roundTrip(spec);
 
     const names = parsed.root.nodes.map((n) => n.name).filter(Boolean);
-    expect(names).toContain("osc~");       // BD oscillators
-    expect(names).toContain("noise~");     // SN/HH/CP noise source
-    expect(names).toContain("bob~");       // BD warmth + SN noise filter
-    expect(names).toContain("bp~");        // HH metallic + CP body
-    expect(names).toContain("hip~");       // HH highpass
+    expect(names).toContain("osc~");       // BD + CH/OH metallic oscillators
+    expect(names).toContain("noise~");     // SN + CP noise source
+    expect(names).toContain("bp~");        // CH/OH metallic + CP body
+    expect(names).toContain("hip~");       // CH/OH highpass
     expect(names).toContain("vline~");     // envelopes
+    expect(names).toContain("metro");      // internal clock
+    expect(names).toContain("sel");        // pattern matching
     expect(names).toContain("dac~");
-    // BD has body + sub-bass oscillators
+    // BD (1) + SN (2) + CH (6) + OH (6) = 15 osc~ minimum
     const oscCount = names.filter((n) => n === "osc~").length;
-    expect(oscCount).toBeGreaterThanOrEqual(2);
-    // Multiple envelopes across voices
+    expect(oscCount).toBeGreaterThanOrEqual(15);
+    // Multiple envelopes across 5 voices
     const vlineCount = names.filter((n) => n === "vline~").length;
     expect(vlineCount).toBeGreaterThanOrEqual(5);
   });
 
-  it("builds with custom voices (bd + hh only)", () => {
-    const spec = buildDrumMachine({ voices: ["bd", "hh"] });
+  it("builds with custom voices (bd + ch only)", () => {
+    const spec = buildDrumMachine({ voices: ["bd", "ch"] });
     const { parsed } = roundTrip(spec);
 
     const names = parsed.root.nodes.map((n) => n.name).filter(Boolean);
-    expect(names).toContain("osc~");       // BD
-    expect(names).toContain("bob~");       // BD filter
-    expect(names).toContain("hip~");       // HH
-    expect(names).toContain("bp~");        // HH metallic resonance
+    expect(names).toContain("osc~");       // BD + CH metallic
+    expect(names).toContain("hip~");       // CH highpass
+    expect(names).toContain("bp~");        // CH metallic resonance
     expect(names).toContain("dac~");
   });
 
@@ -209,17 +209,15 @@ describe("drum-machine template", () => {
 
     const names = parsed.root.nodes.map((n) => n.name).filter(Boolean);
     expect(names).toContain("osc~");
-    expect(names).toContain("bob~");       // BD filter
     expect(names).toContain("dac~");
-    // Single voice → no +~ for summing (only BD internal +~ for body+sub mix)
-    // BD uses one +~ for body+sub, so there should be exactly 1
+    // Single voice BD → no +~ for summing (808 BD is pure sine, no body+sub mix)
     const plusCount = names.filter((n) => n === "+~").length;
-    expect(plusCount).toBe(1); // body+sub mix only, no summing chain
+    expect(plusCount).toBe(0); // no summing chain needed
   });
 
-  it("builds with custom params", () => {
+  it("builds with legacy params (tune/decay/tone backward compat)", () => {
     const spec = buildDrumMachine({
-      voices: ["bd", "sn", "hh", "cp"],
+      voices: ["bd", "sn", "ch", "cp"],
       tune: 0.8,
       decay: 0.3,
       tone: 0.7,
@@ -235,12 +233,13 @@ describe("drum-machine template", () => {
   it("exposes per-voice volume parameters", () => {
     const spec = buildDrumMachine();
     expect(spec.parameters).toBeDefined();
-    expect(spec.parameters!.length).toBe(5); // master + 4 per-voice
+    expect(spec.parameters!.length).toBe(6); // master + 5 per-voice
     const paramNames = spec.parameters!.map((p) => p.name);
     expect(paramNames).toContain("volume");
     expect(paramNames).toContain("volume_bd");
     expect(paramNames).toContain("volume_sn");
-    expect(paramNames).toContain("volume_hh");
+    expect(paramNames).toContain("volume_ch");
+    expect(paramNames).toContain("volume_oh");
     expect(paramNames).toContain("volume_cp");
     for (const p of spec.parameters!) {
       expect(p.category).toBe("amplitude");
@@ -248,46 +247,48 @@ describe("drum-machine template", () => {
   });
 
   it("per-voice params match selected voices", () => {
-    const spec = buildDrumMachine({ voices: ["bd", "hh"] });
+    const spec = buildDrumMachine({ voices: ["bd", "ch"] });
     expect(spec.parameters!.length).toBe(3); // master + 2 per-voice
     const paramNames = spec.parameters!.map((p) => p.name);
     expect(paramNames).toContain("volume");
     expect(paramNames).toContain("volume_bd");
-    expect(paramNames).toContain("volume_hh");
+    expect(paramNames).toContain("volume_ch");
     expect(paramNames).not.toContain("volume_sn");
     expect(paramNames).not.toContain("volume_cp");
   });
 
-  it("BD has sub-bass layer (2+ osc~ nodes)", () => {
-    const spec = buildDrumMachine({ voices: ["bd"] });
+  it("OH has 6 metallic oscillators", () => {
+    const spec = buildDrumMachine({ voices: ["oh"] });
     const { parsed } = roundTrip(spec);
     const oscCount = parsed.root.nodes.filter((n) => n.name === "osc~").length;
-    expect(oscCount).toBeGreaterThanOrEqual(2);
+    expect(oscCount).toBe(6);
   });
 
-  it("BD amp envelope starts with 0 (attack ramp)", () => {
+  it("BD amp envelope starts with 0 (2ms attack ramp)", () => {
     const spec = buildDrumMachine({ voices: ["bd"] });
     const { pdText } = roundTrip(spec);
     // The amp message should contain "0" as first arg (start silent, ramp up)
-    // Look for the pattern: msg with "0 \\, 1 3" (attack ramp from 0 to 1 in 3ms)
-    expect(pdText).toContain("0 \\, 1 3");
+    // Look for the pattern: msg with "0 \\, 1 2" (attack ramp from 0 to 1 in 2ms)
+    expect(pdText).toContain("0 \\, 1 2");
   });
 
-  it("CP multi-tap burst envelope survives round-trip", () => {
+  it("CP 5-burst envelope survives round-trip", () => {
     const spec = buildDrumMachine({ voices: ["cp"] });
     const { pdText } = roundTrip(spec);
-    // 808-style clap: 3 bursts at t=0, t=6ms, t=12ms using vline~ delay param
-    // vline~ segments with 3 values (target time delay) are a critical pattern
-    expect(pdText).toContain("0.7 1 6"); // 2nd burst at delay=6ms
-    expect(pdText).toContain("0.6 1 12"); // 3rd burst at delay=12ms
+    // 808-style clap: 5 bursts using vline~ delay param
+    expect(pdText).toContain("0.7 1 5");  // 2nd burst at delay=5ms
+    expect(pdText).toContain("0.6 1 10"); // 3rd burst at delay=10ms
+    expect(pdText).toContain("0.5 1 15"); // 4th burst at delay=15ms
+    expect(pdText).toContain("0.4 1 20"); // 5th burst at delay=20ms
   });
 
   it("exposes trigger ports for wiring", () => {
-    const spec = buildDrumMachine({ voices: ["bd", "sn", "hh", "cp"] });
+    const spec = buildDrumMachine({ voices: ["bd", "sn", "ch", "oh", "cp"] });
     const portNames = spec.ports.map((p) => p.name);
     expect(portNames).toContain("trig_bd");
     expect(portNames).toContain("trig_sn");
-    expect(portNames).toContain("trig_hh");
+    expect(portNames).toContain("trig_ch");
+    expect(portNames).toContain("trig_oh");
     expect(portNames).toContain("trig_cp");
     expect(portNames).toContain("audio");
     // Trigger ports are control inputs, audio is output
@@ -302,22 +303,155 @@ describe("drum-machine template", () => {
   });
 
   it("subset voices only expose matching trigger ports", () => {
-    const spec = buildDrumMachine({ voices: ["hh", "cp"] });
+    const spec = buildDrumMachine({ voices: ["ch", "cp"] });
     const portNames = spec.ports.map((p) => p.name);
-    expect(portNames).toContain("trig_hh");
+    expect(portNames).toContain("trig_ch");
     expect(portNames).toContain("trig_cp");
     expect(portNames).not.toContain("trig_bd");
     expect(portNames).not.toContain("trig_sn");
   });
 
   it("builds with boundary params (0 and 1)", () => {
-    // tune=0 → lowest pitch, decay=1 → longest decay, tone=0 → darkest
-    const low = buildDrumMachine({ tune: 0, decay: 1, tone: 0, amplitude: 0 });
+    // morphX=0 → lowest pitch, morphY=1 → longest decay
+    const low = buildDrumMachine({ morphX: 0, morphY: 1, amplitude: 0 });
     roundTrip(low); // must not throw
 
-    // tune=1 → highest pitch, decay=0 → shortest, tone=1 → brightest
-    const high = buildDrumMachine({ tune: 1, decay: 0, tone: 1, amplitude: 1 });
+    // morphX=1 → highest pitch, morphY=0 → shortest
+    const high = buildDrumMachine({ morphX: 1, morphY: 0, amplitude: 1 });
     roundTrip(high); // must not throw
+  });
+
+  // ── New tests: clock + tap tempo ──
+
+  it("builds with internal clock (bpm > 0)", () => {
+    const spec = buildDrumMachine({ bpm: 130 });
+    const { parsed } = roundTrip(spec);
+
+    const names = parsed.root.nodes.map((n) => n.name).filter(Boolean);
+    expect(names).toContain("metro");
+    expect(names).toContain("loadbang");
+    expect(names).toContain("float");
+    expect(names).toContain("mod");
+    expect(names).toContain("sel");
+  });
+
+  it("bpm=0 builds counter without metro", () => {
+    const spec = buildDrumMachine({ bpm: 0 });
+    const { parsed } = roundTrip(spec);
+
+    const names = parsed.root.nodes.map((n) => n.name).filter(Boolean);
+    expect(names).not.toContain("metro");
+    expect(names).not.toContain("loadbang");
+    // Counter chain always present
+    expect(names).toContain("float");
+    expect(names).toContain("mod");
+    // sel still present for pattern matching
+    expect(names).toContain("sel");
+  });
+
+  it("CH has 6 metallic oscillators", () => {
+    const spec = buildDrumMachine({ voices: ["ch"] });
+    const { parsed } = roundTrip(spec);
+    const oscCount = parsed.root.nodes.filter((n) => n.name === "osc~").length;
+    expect(oscCount).toBe(6);
+  });
+
+  it("clock_out always exposed", () => {
+    const spec0 = buildDrumMachine({ bpm: 0 });
+    const spec120 = buildDrumMachine({ bpm: 120 });
+    expect(spec0.ports.find((p) => p.name === "clock_out")).toBeDefined();
+    expect(spec120.ports.find((p) => p.name === "clock_out")).toBeDefined();
+    const port = spec120.ports.find((p) => p.name === "clock_out")!;
+    expect(port.type).toBe("control");
+    expect(port.direction).toBe("output");
+  });
+
+  it("OH/CH choke: CH trigger wires to OH envelope", () => {
+    const spec = buildDrumMachine({ voices: ["ch", "oh"] });
+    // Choke msg exists: msg with args [0, 5]
+    const chokeMsg = spec.spec.nodes.find(
+      (n) => n.type === "msg" && n.args && n.args[0] === 0 && n.args[1] === 5,
+    );
+    expect(chokeMsg).toBeDefined();
+    // Verify wiring: chokeMsg is connected to OH's ampVline
+    const chokeMsgIdx = spec.spec.nodes.indexOf(chokeMsg!);
+    const chokeWire = spec.spec.connections.find((c) => c.from === chokeMsgIdx);
+    expect(chokeWire).toBeDefined();
+  });
+
+  it("default voices are bd, sn, ch, oh, cp", () => {
+    const spec = buildDrumMachine();
+    const portNames = spec.ports
+      .filter((p) => p.name.startsWith("trig_"))
+      .map((p) => p.name.replace("trig_", ""));
+    expect(portNames).toEqual(["bd", "sn", "ch", "oh", "cp"]);
+  });
+
+  it("morphX/morphY params affect synthesis", () => {
+    const low = buildDrumMachine({ morphX: 0, morphY: 0, voices: ["bd"] });
+    const high = buildDrumMachine({ morphX: 1, morphY: 1, voices: ["bd"] });
+    // Different morph values should produce different node args (e.g. osc~ frequencies)
+    const lowPd = buildPatch(low.spec);
+    const highPd = buildPatch(high.spec);
+    expect(lowPd).not.toBe(highPd);
+  });
+
+  it("tap tempo nodes present when bpm > 0", () => {
+    const spec = buildDrumMachine({ bpm: 120 });
+    const { parsed } = roundTrip(spec);
+
+    const names = parsed.root.nodes.map((n) => n.name).filter(Boolean);
+    expect(names).toContain("timer");
+    expect(names).toContain("t"); // trigger for tap
+  });
+
+  it("hh alias normalizes to ch", () => {
+    const spec = buildDrumMachine({ voices: ["bd", "hh"] as any });
+    const portNames = spec.ports.map((p) => p.name);
+    expect(portNames).toContain("trig_ch"); // hh → ch
+    expect(portNames).not.toContain("trig_hh");
+  });
+
+  // ── clock_in tests ──
+
+  it("exposes clock_in port", () => {
+    const spec = buildDrumMachine({});
+    const port = spec.ports.find((p) => p.name === "clock_in");
+    expect(port).toBeDefined();
+    expect(port!.type).toBe("control");
+    expect(port!.direction).toBe("input");
+  });
+
+  it("clock_in has ioNodeIndex when bpm > 0", () => {
+    const spec = buildDrumMachine({ bpm: 120 });
+    const port = spec.ports.find((p) => p.name === "clock_in");
+    expect(port).toBeDefined();
+    expect(port!.ioNodeIndex).toBeDefined();
+  });
+
+  it("clock_in has no ioNodeIndex when bpm = 0", () => {
+    const spec = buildDrumMachine({ bpm: 0 });
+    const port = spec.ports.find((p) => p.name === "clock_in");
+    expect(port).toBeDefined();
+    expect(port!.ioNodeIndex).toBeUndefined();
+  });
+
+  it("title shows EXT when bpm=0", () => {
+    const spec = buildDrumMachine({ bpm: 0 });
+    const { parsed } = roundTrip(spec);
+    const title = parsed.root.nodes.find(
+      (n) => n.type === "text" && n.args?.includes("EXT"),
+    );
+    expect(title).toBeDefined();
+  });
+
+  it("title shows BPM when bpm > 0", () => {
+    const spec = buildDrumMachine({ bpm: 140 });
+    const { parsed } = roundTrip(spec);
+    const title = parsed.root.nodes.find(
+      (n) => n.type === "text" && n.args?.includes("140BPM"),
+    );
+    expect(title).toBeDefined();
   });
 });
 

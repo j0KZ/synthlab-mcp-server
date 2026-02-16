@@ -14,7 +14,7 @@ import type { WireSpec } from "../wiring/bus-injector.js";
 import type { RackModuleSpec } from "../tools/rack.js";
 
 /** Templates that accept a clock_in port. */
-const CLOCKED_TEMPLATES = new Set(["sequencer", "turing-machine"]);
+const CLOCKED_TEMPLATES = new Set(["sequencer", "turing-machine", "drum-machine"]);
 
 /** Templates that produce audio output. */
 const AUDIO_PRODUCERS = new Set(["synth", "drum-machine", "granular"]);
@@ -65,22 +65,11 @@ export function generateWiringPlan(
   const clockedModules = instrumentModules.filter(
     (m) => CLOCKED_TEMPLATES.has(m.template),
   );
-  const drumModules = instrumentModules.filter(
-    (m) => m.template === "drum-machine",
-  );
-
-  // Count total clock targets (each needs a unique division)
-  let clockTargetCount = clockedModules.length;
-  for (const drum of drumModules) {
-    const voices = (drum.params.voices as string[]) ?? ["bd", "sn", "hh", "cp"];
-    clockTargetCount += voices.length;
-  }
-
-  const needsClock = clockTargetCount > 0;
+  const needsClock = clockedModules.length > 0;
   const clockId = "clock";
 
   if (needsClock && clockDivisions.length > 0) {
-    const divisions = expandDivisions(clockDivisions, clockTargetCount);
+    const divisions = expandDivisions(clockDivisions, clockedModules.length);
 
     allModules.push({
       template: "clock",
@@ -90,7 +79,7 @@ export function generateWiringPlan(
 
     let divIdx = 0;
 
-    // Wire clock → sequencers/turing-machines
+    // Wire clock → clocked modules (sequencers, turing-machines, drum-machines)
     for (const mod of clockedModules) {
       const div = divisions[divIdx];
       allWires.push({
@@ -100,21 +89,6 @@ export function generateWiringPlan(
         input: "clock_in",
       });
       divIdx++;
-    }
-
-    // Wire clock → drum triggers (one division per voice)
-    for (const drum of drumModules) {
-      const voices = (drum.params.voices as string[]) ?? ["bd", "sn", "hh", "cp"];
-      for (const voice of voices) {
-        const div = divisions[divIdx];
-        allWires.push({
-          from: clockId,
-          output: `beat_div${div}`,
-          to: drum.id,
-          input: `trig_${voice}`,
-        });
-        divIdx++;
-      }
     }
   }
 

@@ -23,7 +23,8 @@ const FILTER_ALIASES: Record<string, string> = {
 const ENVELOPE_ALIASES: Record<string, string> = {
   adr: "adsr", "ad": "ar",
 };
-const VALID_DRUM_VOICES = new Set(["bd", "sn", "hh", "cp"]);
+const VALID_DRUM_VOICES = new Set(["bd", "sn", "ch", "oh", "cp"]);
+const DRUM_VOICE_ALIASES: Record<string, string> = { hh: "ch" };
 const VALID_OUTPUT_RANGES = new Set(["unipolar", "bipolar"]);
 
 export function validateSynthParams(params: Record<string, unknown>): void {
@@ -146,11 +147,28 @@ export function validateDrumMachineParams(params: Record<string, unknown>): void
     if (!Array.isArray(params.voices)) {
       throw new Error("voices must be an array of drum voice types");
     }
-    for (const v of params.voices) {
-      if (!VALID_DRUM_VOICES.has(String(v))) {
+    // Normalize aliases (hh → ch) and validate
+    for (let i = 0; i < params.voices.length; i++) {
+      const v = String(params.voices[i]);
+      const alias = DRUM_VOICE_ALIASES[v];
+      if (alias) {
+        (params.voices as string[])[i] = alias;
+      } else if (!VALID_DRUM_VOICES.has(v)) {
         throw new Error(`Invalid drum voice "${v}". Valid: ${[...VALID_DRUM_VOICES].join(", ")}`);
       }
     }
+  }
+  if (params.bpm !== undefined) {
+    const b = Number(params.bpm);
+    if (!Number.isFinite(b) || b < 0 || b > 300) throw new Error(`bpm must be 0-300, got ${params.bpm}`);
+  }
+  if (params.morphX !== undefined) {
+    const x = Number(params.morphX);
+    if (!Number.isFinite(x) || x < 0 || x > 1) throw new Error(`morphX must be 0-1, got ${params.morphX}`);
+  }
+  if (params.morphY !== undefined) {
+    const y = Number(params.morphY);
+    if (!Number.isFinite(y) || y < 0 || y > 1) throw new Error(`morphY must be 0-1, got ${params.morphY}`);
   }
   if (params.tune !== undefined) {
     const t = Number(params.tune);

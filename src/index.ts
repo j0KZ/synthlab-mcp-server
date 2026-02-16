@@ -200,7 +200,7 @@ server.tool(
   "create_from_template",
   "Generate a Pd patch from a parameterized template. " +
     "Available: synth, sequencer, reverb, mixer, drum-machine, clock, chaos, maths, turing-machine, granular, bridge. " +
-    "Each template accepts specific params (e.g. synth: waveform, filter; sequencer: steps, bpm; drum-machine: voices, tune). " +
+    "Each template accepts specific params (e.g. synth: waveform, filter; sequencer: steps, bpm; drum-machine: voices, bpm, morphX, morphY). " +
     "The complete .pd file content is ALWAYS returned in the response — present it directly to the user. " +
     "STOP after presenting the result. Do NOT run bash, ls, mkdir, cat, cp, mv, or ANY file/shell operations after this tool. " +
     "Do NOT try to save or verify files — everything is already handled. Just show the content to the user.",

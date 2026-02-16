@@ -1,13 +1,21 @@
 /**
- * Drum machine template — 4 analog-style drum voices with per-voice filtering and mixing.
+ * TR-808 Drum Machine — all-in-one clock + 16-step sequencer + 5 voices.
  *
- * Architecture: 3 layers
- *   1. VOICES — BD (2x osc~ body+sub), SN (noise+tone separate envelopes),
- *               HH (noise→hip~→bp~ metallic), CP (noise→bp~ multi-tap burst)
- *   2. FILTER — Per-voice: bob~ (BD warmth, SN noise), bp~ (HH metallic, CP body), hip~ (HH)
- *   3. MIX   — Per-voice *~ levels (exposed params) → +~ summing → *~ master → dac~
+ * Inspired by:
+ *   - Prok modular drums (X/Y morph matrix)
+ *   - Robaux LL8 (16-step trigger sequencer)
+ *   - Endorphins Running Order (tap tempo)
  *
- * Layout: N columns (one per voice), triggers via msg "bang"
+ * Architecture:
+ *   1. CLOCK  — metro + tap tempo + 16-step counter
+ *   2. PATTERN — per-voice sel (matches step indices → trigger)
+ *   3. VOICES — BD (sine sweep), SN (dual osc + noise), CH (6 metallic osc),
+ *              OH (6 metallic osc, long decay), CP (noise burst)
+ *   4. CHOKE  — CH trigger kills OH envelope (post-processing)
+ *   5. MIX    — per-voice *~ levels → +~ summing → *~ master → dac~
+ *
+ * Morph X/Y (generation-time):
+ *   X = pitch/tonal axis, Y = decay + brightness axis
  */
 
 import type {
@@ -17,203 +25,183 @@ import type {
 import type { RackableSpec, ParameterDescriptor } from "./port-info.js";
 import { validateDrumMachineParams } from "./validate-params.js";
 
-export type DrumVoice = "bd" | "sn" | "hh" | "cp";
+export type DrumVoice = "bd" | "sn" | "ch" | "oh" | "cp";
+
+const ALL_VOICES: DrumVoice[] = ["bd", "sn", "ch", "oh", "cp"];
 
 export interface DrumMachineParams {
-  voices?: DrumVoice[]; // default ["bd", "sn", "hh", "cp"]
-  tune?: number; // 0-1 (default 0.5) — pitch
-  decay?: number; // 0-1 (default 0.5) — envelope decay
-  tone?: number; // 0-1 (default 0.5) — filter brightness
-  amplitude?: number; // 0-1 (default 0.7) — master volume
+  voices?: DrumVoice[];   // default ["bd", "sn", "ch", "oh", "cp"]
+  bpm?: number;           // default 120 (0 = external clock mode)
+  morphX?: number;        // 0-1 (default 0.5) — pitch axis
+  morphY?: number;        // 0-1 (default 0.5) — decay+brightness axis
+  amplitude?: number;     // 0-1 (default 0.7) — master volume
+  // Legacy backward compat (from moods.ts / old callers)
+  tune?: number;          // maps to morphX
+  decay?: number;         // maps to morphY
+  tone?: number;          // ignored (derived from X/Y per voice)
 }
 
-const COL_SPACING = 200;
+const DEFAULT_PATTERNS: Record<DrumVoice, number[]> = {
+  bd: [0, 4, 8, 12],                    // four-on-the-floor
+  sn: [4, 12],                           // beats 2 & 4
+  ch: [0, 2, 4, 6, 8, 10, 12],          // 8ths (except where OH plays)
+  oh: [14],                              // last off-beat
+  cp: [8],                               // beat 3
+};
+
+const COL_SPACING = 180;
 const SPACING = 30;
 
 type AddFn = (node: PatchNodeSpec) => number;
 type WireFn = (from: number, to: number, outlet?: number, inlet?: number) => void;
 
-interface VoiceResult {
-  triggerNode: number;
-  outputNode: number;
-  levelNode: number;
+interface VoiceRefs {
+  triggerNode: number;   // sel's last outlet (bang on match)
+  ampVline: number;      // amplitude vline~ (for choke)
+  levelNode: number;     // per-voice *~ level (for parameters)
+  outputNode: number;    // audio output of this voice
   maxY: number;
 }
 
-// ─── BD (Bass Drum) ────────────────────────────────────────────
-// 2x osc~ (body + sub-bass), pseudo-exponential pitch sweep,
-// 3ms attack ramp (no click), bob~ warmth filter, per-voice level.
+// ─── Voice morph derivation ──────────────────────────────────────
+
+interface VoiceMorph {
+  tune: number;
+  decay: number;
+  tone: number;
+}
+
+function deriveMorph(voice: DrumVoice, x: number, y: number): VoiceMorph {
+  switch (voice) {
+    case "bd": return { tune: x, decay: y, tone: y * 0.7 + x * 0.3 };
+    case "sn": return { tune: x, decay: y * 0.8, tone: y };
+    case "ch": return { tune: 0, decay: 0.2 + y * 0.3, tone: x * 0.5 + 0.5 };
+    case "oh": return { tune: 0, decay: 0.5 + y * 0.5, tone: x * 0.5 + 0.5 };
+    case "cp": return { tune: 0, decay: y, tone: x * 0.5 + y * 0.5 };
+  }
+}
+
+// ─── BD (Bass Drum) — 808 pure sine sweep ────────────────────────
 
 function buildBD(
-  add: AddFn, wire: WireFn, x: number, startY: number,
-  tune: number, decay: number, tone: number, amplitude: number,
-): VoiceResult {
+  add: AddFn, wire: WireFn, trigBang: number, x: number, startY: number,
+  morph: VoiceMorph, amplitude: number,
+): VoiceRefs {
   let y = startY;
 
-  const basePitch = 30 + tune * 120; // 30-150 Hz
-  const startPitch = basePitch * (2 + tune * 2); // 2-4x overtone
-  const midPitch = basePitch * 1.5;
-  const pitchDecayMs = Math.round(60 + tune * 40); // 60-100ms total
-  const ampDecayMs = Math.round(80 + decay * 400); // 80-480ms
+  const startFreq = Math.round(300 + morph.tune * 100);  // 300-400 Hz
+  const endFreq = Math.round(45 + morph.tune * 15);      // 45-60 Hz
+  const pitchDecayMs = Math.round(50 + morph.tune * 30);  // 50-80ms
+  const ampDecayMs = Math.round(200 + morph.decay * 300); // 200-500ms
 
-  // Sub-bass pitch values
-  const subStart = Math.round(startPitch * 0.5);
-  const subMid = Math.round(midPitch * 0.5);
-  const subBase = Math.round(basePitch * 0.5);
-
-  // bob~ filter cutoff
-  const filterCutoff = Math.round(basePitch * 3 + tone * basePitch * 8);
-
-  // Trigger
-  const trigger = add({ type: "msg", args: ["bang"], x, y });
-  y += SPACING;
-
-  // ── Pitch envelope (3-segment pseudo-exponential) ──
+  // Pitch envelope: start freq → end freq over pitchDecayMs
   const pitchMsg = add({
     type: "msg",
-    args: [startPitch, "\\,", midPitch, 20, "\\,", basePitch, pitchDecayMs - 20],
-    x: x - 40, y,
+    args: [startFreq, "\\,", endFreq, pitchDecayMs],
+    x, y,
   });
-  wire(trigger, pitchMsg);
+  wire(trigBang, pitchMsg);
+  y += SPACING;
 
-  // ── Sub-bass pitch envelope (same curve at half freq) ──
-  const subPitchMsg = add({
-    type: "msg",
-    args: [subStart, "\\,", subMid, 20, "\\,", subBase, pitchDecayMs - 20],
-    x: x + 80, y,
-  });
-  wire(trigger, subPitchMsg);
-
-  // ── Amp envelope (3ms attack ramp + decay) ──
+  // Amp envelope: 0 → 1 in 2ms → 0 over ampDecayMs (starting at 2ms)
   const ampMsg = add({
     type: "msg",
-    args: [0, "\\,", 1, 3, "\\,", 0, ampDecayMs, 3],
-    x: x + 40, y: y + SPACING * 3,
+    args: [0, "\\,", 1, 2, "\\,", 0, ampDecayMs, 2],
+    x: x + 80, y: startY,
   });
-  wire(trigger, ampMsg);
-  y += SPACING;
+  wire(trigBang, ampMsg);
 
-  // Pitch vline~
-  const pitchVline = add({ name: "vline~", x: x - 40, y });
+  // Pitch vline~ → osc~
+  const pitchVline = add({ name: "vline~", x, y });
   wire(pitchMsg, pitchVline);
-
-  const subPitchVline = add({ name: "vline~", x: x + 80, y });
-  wire(subPitchMsg, subPitchVline);
   y += SPACING;
 
-  // Oscillators
-  const bodyOsc = add({ name: "osc~", args: [Math.round(basePitch)], x: x - 40, y });
-  wire(pitchVline, bodyOsc);
-
-  const subOsc = add({ name: "osc~", args: [subBase], x: x + 80, y });
-  wire(subPitchVline, subOsc);
-  y += SPACING;
-
-  // Mix body + sub
-  const oscMix = add({ name: "+~", x, y });
-  wire(bodyOsc, oscMix);
-  wire(subOsc, oscMix, 0, 1);
-  y += SPACING;
-
-  // bob~ warmth filter
-  const filter = add({ name: "bob~", args: [filterCutoff, 1.5], x, y });
-  wire(oscMix, filter);
+  const osc = add({ name: "osc~", args: [endFreq], x, y });
+  wire(pitchVline, osc);
   y += SPACING;
 
   // Amp vline~ + VCA
-  const ampVline = add({ name: "vline~", x: x + 40, y });
+  const ampVline = add({ name: "vline~", x: x + 80, y: startY + SPACING });
   wire(ampMsg, ampVline);
 
   const vca = add({ name: "*~", x, y });
-  wire(filter, vca);
+  wire(osc, vca);
   wire(ampVline, vca, 0, 1);
   y += SPACING;
 
   // Per-voice level
-  const level = add({ name: "*~", args: [amplitude], x, y });
+  const level = add({ name: "*~", args: [amplitude * 0.8], x, y });
   wire(vca, level);
 
-  return { triggerNode: trigger, outputNode: level, levelNode: level, maxY: y };
+  return { triggerNode: trigBang, ampVline, levelNode: level, outputNode: level, maxY: y };
 }
 
-// ─── SN (Snare) ────────────────────────────────────────────────
-// Tone (osc~ with pitch sweep) + noise (bob~ filtered), separate envelopes,
-// 2ms attack ramps, per-voice level.
+// ─── SN (Snare) — dual osc + noise ──────────────────────────────
 
 function buildSN(
-  add: AddFn, wire: WireFn, x: number, startY: number,
-  tune: number, decay: number, tone: number, amplitude: number,
-): VoiceResult {
+  add: AddFn, wire: WireFn, trigBang: number, x: number, startY: number,
+  morph: VoiceMorph, amplitude: number,
+): VoiceRefs {
   let y = startY;
 
-  const baseTone = Math.round(150 + tune * 100); // 150-250 Hz
-  const startTone = baseTone * 2;
-  const toneDecayMs = Math.round(30 + decay * 50); // 30-80ms (short, punchy)
-  const noiseDecayMs = Math.round(60 + decay * 150); // 60-210ms (longer body)
-  const noiseCutoff = Math.round(1500 + tone * 4000); // 1500-5500 Hz
+  const freq1 = Math.round(180 + morph.tune * 50);  // 180-230 Hz
+  const freq2 = Math.round(330 + morph.tune * 50);  // 330-380 Hz
+  const toneDecayMs = Math.round(50 + morph.decay * 50);   // 50-100ms
+  const noiseDecayMs = Math.round(150 + morph.decay * 150); // 150-300ms
+  const noiseBpFreq = Math.round(5000 + morph.tone * 3000); // 5000-8000 Hz
 
-  // Trigger
-  const trigger = add({ type: "msg", args: ["bang"], x, y });
-  y += SPACING;
-
-  // ── Tone pitch envelope ──
-  const tonePitchMsg = add({
-    type: "msg",
-    args: [startTone, "\\,", baseTone, 30],
-    x: x - 40, y,
-  });
-  wire(trigger, tonePitchMsg);
-
-  // ── Tone amp envelope (2ms attack + short decay) ──
+  // Tone amp envelope
   const toneAmpMsg = add({
     type: "msg",
-    args: [0, "\\,", 1, 2, "\\,", 0, toneDecayMs, 2],
-    x: x - 40, y: y + SPACING * 2,
+    args: [0, "\\,", 0.4, 2, "\\,", 0, toneDecayMs, 2],
+    x, y,
   });
-  wire(trigger, toneAmpMsg);
+  wire(trigBang, toneAmpMsg);
 
-  // ── Noise amp envelope (2ms attack + longer decay) ──
+  // Noise amp envelope
   const noiseAmpMsg = add({
     type: "msg",
-    args: [0, "\\,", 0.8, 2, "\\,", 0, noiseDecayMs, 2],
-    x: x + 80, y,
+    args: [0, "\\,", 0.6, 2, "\\,", 0, noiseDecayMs, 2],
+    x: x + 100, y,
   });
-  wire(trigger, noiseAmpMsg);
+  wire(trigBang, noiseAmpMsg);
   y += SPACING;
 
-  // Tone pitch vline~
-  const tonePitchVline = add({ name: "vline~", x: x - 40, y });
-  wire(tonePitchMsg, tonePitchVline);
+  // Tone vline~
+  const toneAmpVline = add({ name: "vline~", x, y });
+  wire(toneAmpMsg, toneAmpVline);
 
-  // Noise amp vline~
-  const noiseAmpVline = add({ name: "vline~", x: x + 80, y });
+  // Noise vline~
+  const noiseAmpVline = add({ name: "vline~", x: x + 100, y });
   wire(noiseAmpMsg, noiseAmpVline);
   y += SPACING;
 
-  // Tone osc
-  const toneOsc = add({ name: "osc~", args: [baseTone], x: x - 40, y });
-  wire(tonePitchVline, toneOsc);
-
-  // Noise source + bob~ filter
-  const noise = add({ name: "noise~", x: x + 80, y });
+  // Oscillators
+  const osc1 = add({ name: "osc~", args: [freq1], x, y });
+  const osc2 = add({ name: "osc~", args: [freq2], x: x + 60, y });
   y += SPACING;
 
-  const noiseFilter = add({ name: "bob~", args: [noiseCutoff, 1.5], x: x + 80, y });
-  wire(noise, noiseFilter);
+  // Mix tone oscs
+  const toneMix = add({ name: "+~", x, y });
+  wire(osc1, toneMix);
+  wire(osc2, toneMix, 0, 1);
+  y += SPACING;
 
-  // Tone amp vline~ + VCA
-  const toneAmpVline = add({ name: "vline~", x: x - 40, y });
-  wire(toneAmpMsg, toneAmpVline);
-
-  const toneVca = add({ name: "*~", x: x - 40, y: y + SPACING });
-  wire(toneOsc, toneVca);
+  // Tone VCA
+  const toneVca = add({ name: "*~", x, y });
+  wire(toneMix, toneVca);
   wire(toneAmpVline, toneVca, 0, 1);
 
+  // Noise chain
+  const noise = add({ name: "noise~", x: x + 100, y: y - SPACING });
+  const noiseBp = add({ name: "bp~", args: [noiseBpFreq, 2], x: x + 100, y });
+  wire(noise, noiseBp);
+  y += SPACING;
+
   // Noise VCA
-  const noiseVca = add({ name: "*~", x: x + 80, y: y + SPACING });
-  wire(noiseFilter, noiseVca);
+  const noiseVca = add({ name: "*~", x: x + 100, y: y - SPACING });
+  wire(noiseBp, noiseVca);
   wire(noiseAmpVline, noiseVca, 0, 1);
-  y += SPACING * 2;
 
   // Mix tone + noise
   const mix = add({ name: "+~", x, y });
@@ -225,56 +213,77 @@ function buildSN(
   const level = add({ name: "*~", args: [amplitude], x, y });
   wire(mix, level);
 
-  return { triggerNode: trigger, outputNode: level, levelNode: level, maxY: y };
+  // Use toneAmpVline as the "main" amp for choke purposes (not applicable for SN, but consistent)
+  return { triggerNode: trigBang, ampVline: toneAmpVline, levelNode: level, outputNode: level, maxY: y };
 }
 
-// ─── HH (Hi-Hat) ──────────────────────────────────────────────
-// noise~ → hip~ → bp~ (metallic resonance), attack ramp, per-voice level.
+// ─── Metallic hat builder (shared by CH and OH) ──────────────────
 
-function buildHH(
-  add: AddFn, wire: WireFn, x: number, startY: number,
-  _tune: number, decay: number, tone: number, amplitude: number,
-): VoiceResult {
+const HAT_FREQS = [205, 330, 400, 450, 540, 800]; // 808 inharmonic frequencies
+
+function buildHat(
+  add: AddFn, wire: WireFn, trigBang: number, x: number, startY: number,
+  morph: VoiceMorph, amplitude: number,
+): VoiceRefs {
   let y = startY;
 
-  const hipFreq = Math.round(4000 + tone * 6000); // 4000-10000 Hz
-  const metalFreq = Math.round(6000 + tone * 4000); // 6000-10000 Hz
-  const metalQ = Math.round(3 + tone * 5); // 3-8
-  const ampDecayMs = Math.round(15 + decay * 300); // 15-315ms
+  const decayMs = Math.round(morph.decay * 1000); // derive from morph.decay directly
+  const bpFreq = Math.round(5000 + morph.tone * 4000); // 5000-9000 Hz
 
-  // Trigger
-  const trigger = add({ type: "msg", args: ["bang"], x, y });
-  y += SPACING;
-
-  // ── Amp envelope (1ms attack + decay) ──
+  // Amp envelope
   const ampMsg = add({
     type: "msg",
-    args: [0, "\\,", 0.7, 1, "\\,", 0, ampDecayMs, 1],
-    x: x + 60, y,
+    args: [0, "\\,", 0.7, 1, "\\,", 0, decayMs, 1],
+    x: x + 100, y,
   });
-  wire(trigger, ampMsg);
+  wire(trigBang, ampMsg);
   y += SPACING;
 
-  const ampVline = add({ name: "vline~", x: x + 60, y });
+  const ampVline = add({ name: "vline~", x: x + 100, y });
   wire(ampMsg, ampVline);
 
-  // Noise source
-  const noise = add({ name: "noise~", x, y });
+  // 6 oscillators in two groups of 3
+  const osc: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    osc.push(add({ name: "osc~", args: [HAT_FREQS[i]], x: x + (i % 3) * 50, y }));
+  }
   y += SPACING;
 
-  // hip~ (remove low end)
-  const hip = add({ name: "hip~", args: [hipFreq], x, y });
-  wire(noise, hip);
+  // Sum group 1: osc[0] + osc[1] + osc[2]
+  const sum1 = add({ name: "+~", x, y });
+  wire(osc[0], sum1);
+  wire(osc[1], sum1, 0, 1);
+  const sum1b = add({ name: "+~", x, y: y + SPACING });
+  wire(sum1, sum1b);
+  wire(osc[2], sum1b, 0, 1);
+
+  // Sum group 2: osc[3] + osc[4] + osc[5]
+  const sum2 = add({ name: "+~", x: x + 80, y });
+  wire(osc[3], sum2);
+  wire(osc[4], sum2, 0, 1);
+  const sum2b = add({ name: "+~", x: x + 80, y: y + SPACING });
+  wire(sum2, sum2b);
+  wire(osc[5], sum2b, 0, 1);
+  y += SPACING * 2;
+
+  // Combine both groups
+  const allSum = add({ name: "+~", x, y });
+  wire(sum1b, allSum);
+  wire(sum2b, allSum, 0, 1);
   y += SPACING;
 
-  // bp~ (metallic resonance)
-  const bp = add({ name: "bp~", args: [metalFreq, metalQ], x, y });
-  wire(hip, bp);
+  // bp~ + hip~
+  const bp = add({ name: "bp~", args: [bpFreq, 2], x, y });
+  wire(allSum, bp);
+  y += SPACING;
+
+  const hip = add({ name: "hip~", args: [6000], x, y });
+  wire(bp, hip);
   y += SPACING;
 
   // VCA
   const vca = add({ name: "*~", x, y });
-  wire(bp, vca);
+  wire(hip, vca);
   wire(ampVline, vca, 0, 1);
   y += SPACING;
 
@@ -282,43 +291,39 @@ function buildHH(
   const level = add({ name: "*~", args: [amplitude], x, y });
   wire(vca, level);
 
-  return { triggerNode: trigger, outputNode: level, levelNode: level, maxY: y };
+  return { triggerNode: trigBang, ampVline, levelNode: level, outputNode: level, maxY: y };
 }
 
-// ─── CP (Clap) ─────────────────────────────────────────────────
-// noise~ → bp~, multi-tap burst envelope (808-style: 3 bursts + tail), per-voice level.
+// ─── CP (Clap) — noise burst envelope ────────────────────────────
 
 function buildCP(
-  add: AddFn, wire: WireFn, x: number, startY: number,
-  _tune: number, decay: number, tone: number, amplitude: number,
-): VoiceResult {
+  add: AddFn, wire: WireFn, trigBang: number, x: number, startY: number,
+  morph: VoiceMorph, amplitude: number,
+): VoiceRefs {
   let y = startY;
 
-  const bpFreq = Math.round(1000 + tone * 1500); // 1000-2500 Hz
-  const bpQ = Math.round(3 + tone * 5); // 3-8
-  const tailDecay = Math.round(30 + decay * 120); // 30-150ms
+  const bpFreq = Math.round(2000 + morph.tone * 1500); // 2000-3500 Hz
+  const tailDecay = Math.round(100 + morph.decay * 200); // 100-300ms
 
-  // Trigger
-  const trigger = add({ type: "msg", args: ["bang"], x, y });
-  y += SPACING;
-
-  // ── Multi-tap burst envelope ──
-  // 3 short bursts (at t=0, t=6ms, t=12ms) + decay tail
-  // vline~ format: target time [delay] — 3rd value is delay from trigger
+  // 5-burst envelope: rapid re-triggers then tail decay
   const ampMsg = add({
     type: "msg",
     args: [
       0, "\\,",
       0.8, 1, "\\,",
-      0, 5, 1, "\\,",
-      0.7, 1, 6, "\\,",
-      0, 5, 7, "\\,",
-      0.6, 1, 12, "\\,",
-      0, tailDecay, 13,
+      0, 4, 1, "\\,",
+      0.7, 1, 5, "\\,",
+      0, 4, 6, "\\,",
+      0.6, 1, 10, "\\,",
+      0, 4, 11, "\\,",
+      0.5, 1, 15, "\\,",
+      0, 4, 16, "\\,",
+      0.4, 1, 20, "\\,",
+      0, tailDecay, 21,
     ],
     x: x + 60, y,
   });
-  wire(trigger, ampMsg);
+  wire(trigBang, ampMsg);
   y += SPACING;
 
   const ampVline = add({ name: "vline~", x: x + 60, y });
@@ -329,7 +334,7 @@ function buildCP(
   y += SPACING;
 
   // bp~ (body)
-  const bp = add({ name: "bp~", args: [bpFreq, bpQ], x, y });
+  const bp = add({ name: "bp~", args: [bpFreq, 2], x, y });
   wire(noise, bp);
   y += SPACING;
 
@@ -343,30 +348,21 @@ function buildCP(
   const level = add({ name: "*~", args: [amplitude], x, y });
   wire(vca, level);
 
-  return { triggerNode: trigger, outputNode: level, levelNode: level, maxY: y };
+  return { triggerNode: trigBang, ampVline, levelNode: level, outputNode: level, maxY: y };
 }
 
-// ─── Main builder ──────────────────────────────────────────────
-
-const VOICE_BUILDERS: Record<DrumVoice, typeof buildBD> = {
-  bd: buildBD,
-  sn: buildSN,
-  hh: buildHH,
-  cp: buildCP,
-};
+// ─── Main builder ────────────────────────────────────────────────
 
 export function buildDrumMachine(params: DrumMachineParams = {}): RackableSpec {
   validateDrumMachineParams(params as Record<string, unknown>);
 
-  const voices: DrumVoice[] = (params.voices as DrumVoice[] | undefined) ?? [
-    "bd",
-    "sn",
-    "hh",
-    "cp",
-  ];
-  const tune = params.tune ?? 0.5;
-  const decay = params.decay ?? 0.5;
-  const tone = params.tone ?? 0.5;
+  // Normalize legacy "hh" → "ch" (runtime safety — validation also does this)
+  const voices: DrumVoice[] = ((params.voices as string[] | undefined) ?? [...ALL_VOICES])
+    .map(v => (v === "hh" ? "ch" : v) as DrumVoice);
+
+  const bpm = params.bpm ?? 120;
+  const morphX = params.morphX ?? params.tune ?? 0.5;
+  const morphY = params.morphY ?? params.decay ?? 0.5;
   const amplitude = params.amplitude ?? 0.7;
 
   const nodes: PatchNodeSpec[] = [];
@@ -384,31 +380,146 @@ export function buildDrumMachine(params: DrumMachineParams = {}): RackableSpec {
   // ─── Title ──────────────────────────────────────
   add({
     type: "text",
-    args: ["Drum", "Machine:", voices.join(" ").toUpperCase()],
+    args: [`TR-808:`, voices.join(" ").toUpperCase(), bpm > 0 ? `${bpm}BPM` : "EXT"],
     x: 50,
     y: 10,
   });
 
-  const voiceResults: VoiceResult[] = [];
-  const triggerIndices = new Map<DrumVoice, number>();
+  // ─── Counter (always built) ────────────────────
+  let counterNode: number;
+  let metroNode: number | undefined;
+  let floatNode: number;
+  let cy = 40;
+
+  add({ type: "text", args: ["---", "Counter", "---"], x: 50, y: cy });
+  cy += 20;
+
+  floatNode = add({ name: "float", args: [-1], x: 50, y: cy });
+  const plusOne = add({ name: "+", args: [1], x: 120, y: cy });
+  wire(floatNode, plusOne);
+  cy += SPACING;
+
+  const modNode = add({ name: "mod", args: [16], x: 50, y: cy });
+  wire(plusOne, modNode);
+  wire(modNode, floatNode, 0, 1); // feedback: mod → float right inlet
+  cy += SPACING;
+  counterNode = modNode;
+
+  // ─── Internal clock + tap tempo (when bpm > 0) ─
+  if (bpm > 0) {
+    const intervalMs = Math.round(15000 / bpm); // 16th note interval
+
+    add({ type: "text", args: ["---", "Clock", "---"], x: 200, y: 40 });
+
+    // Auto-start: loadbang → [1( → metro
+    const loadbang = add({ name: "loadbang", x: 200, y: 60 });
+    const startMsg = add({ type: "msg", args: [1], x: 200, y: 90 });
+    wire(loadbang, startMsg);
+
+    metroNode = add({ name: "metro", args: [intervalMs], x: 200, y: 120 });
+    wire(startMsg, metroNode);
+    wire(metroNode, floatNode); // metro drives counter
+
+    // ── Tap tempo section ──
+    const tapBng = add({ name: "bng", args: [15, 250, 50, 0, "empty", "empty", "tap", 17, 7, 0, 8, -262144, -1, -1], x: 350, y: 90 });
+
+    // t b b: right fires first (outlet 1 → timer right inlet to measure),
+    //        then left fires (outlet 0 → timer left inlet to reset)
+    const trigTap = add({ name: "t", args: ["b", "b"], x: 350, y: 120 });
+    wire(tapBng, trigTap);
+
+    const timer = add({ name: "timer", x: 350, y: 150 });
+    wire(trigTap, timer, 1, 1);  // right outlet → timer right inlet (measure)
+    wire(trigTap, timer, 0, 0);  // left outlet → timer left inlet (reset)
+
+    // timer → / 4 → metro right inlet (set new interval for 16th notes)
+    const divFour = add({ name: "/", args: [4], x: 350, y: 180 });
+    wire(timer, divFour);
+    wire(divFour, metroNode, 0, 1); // metro right inlet = set interval
+  }
+
+  // ─── Voices ─────────────────────────────────────
+  const builtVoices = new Map<DrumVoice, VoiceRefs>();
+  const triggerInputNodes = new Map<DrumVoice, number>(); // for ports (external trig input)
   let maxVoiceY = 0;
+
+  const voiceStartY = bpm > 0 ? 260 : 160;
 
   voices.forEach((voice, col) => {
     const x = 50 + col * COL_SPACING;
-    const labelY = 40;
+    let vy = voiceStartY;
 
     // Voice label
-    add({ type: "text", args: ["---", voice.toUpperCase(), "---"], x, y: labelY });
+    add({ type: "text", args: ["---", voice.toUpperCase(), "---"], x, y: vy });
+    vy += 20;
 
-    const builder = VOICE_BUILDERS[voice];
-    const result = builder(add, wire, x, labelY + 20, tune, decay, tone, amplitude);
+    // Pattern: sel [step_indices...] connected to counter
+    const pattern = DEFAULT_PATTERNS[voice];
 
-    voiceResults.push(result);
-    triggerIndices.set(voice, result.triggerNode);
-    if (result.maxY > maxVoiceY) maxVoiceY = result.maxY;
+    // sel node with pattern steps
+    const sel = add({ name: "sel", args: pattern, x, y: vy });
+    if (counterNode !== undefined) {
+      wire(counterNode, sel);
+    }
+    vy += SPACING;
+
+    // sel's last outlet = "no match", outlets 0..N-1 = bang on match
+    // We need a trigger bang: connect all match outlets to a single bang
+    // Use t b (trigger) to consolidate — or just wire first match outlet
+    // Actually, each matched outlet fires independently. We need to merge them.
+    // Use a single bang object that any match triggers:
+    const bangNode = add({ name: "bang", x, y: vy });
+    for (let i = 0; i < pattern.length; i++) {
+      wire(sel, bangNode, i);
+    }
+    vy += SPACING;
+
+    // Store trigger input for external wiring (port)
+    triggerInputNodes.set(voice, bangNode);
+
+    // Build voice synth
+    const morph = deriveMorph(voice, morphX, morphY);
+    let refs: VoiceRefs;
+
+    switch (voice) {
+      case "bd":
+        refs = buildBD(add, wire, bangNode, x, vy, morph, amplitude);
+        break;
+      case "sn":
+        refs = buildSN(add, wire, bangNode, x, vy, morph, amplitude);
+        break;
+      case "ch":
+        refs = buildHat(add, wire, bangNode, x, vy, morph, amplitude);
+        break;
+      case "oh":
+        refs = buildHat(add, wire, bangNode, x, vy, morph, amplitude);
+        break;
+      case "cp":
+        refs = buildCP(add, wire, bangNode, x, vy, morph, amplitude);
+        break;
+    }
+
+    builtVoices.set(voice, refs);
+    if (refs.maxY > maxVoiceY) maxVoiceY = refs.maxY;
   });
 
+  // ─── OH/CH Choke (post-processing) ─────────────
+  const chVoice = builtVoices.get("ch");
+  const ohVoice = builtVoices.get("oh");
+  if (chVoice && ohVoice) {
+    // CH trigger sends "0 5" to OH's ampVline~ (kills in 5ms)
+    const chokeMsg = add({
+      type: "msg",
+      args: [0, 5],
+      x: 50 + voices.indexOf("oh") * COL_SPACING + 100,
+      y: voiceStartY + 20 + SPACING, // near OH's trigger area
+    });
+    wire(triggerInputNodes.get("ch")!, chokeMsg);
+    wire(chokeMsg, ohVoice.ampVline);
+  }
+
   // ─── Summing + Output ───────────────────────────
+  const voiceResults = voices.map(v => builtVoices.get(v)!);
   const outY = maxVoiceY + 40;
   add({ type: "text", args: ["---", "Output", "---"], x: 50, y: outY });
 
@@ -436,22 +547,51 @@ export function buildDrumMachine(params: DrumMachineParams = {}): RackableSpec {
   const gainY =
     outY + SPACING + Math.max(0, voiceResults.length - 2) * SPACING + SPACING;
 
-  const gain = add({ name: "*~", args: [amplitude], x: 50, y: gainY });
-  wire(sumOut, gain);
+  const masterGain = add({ name: "*~", args: [amplitude], x: 50, y: gainY });
+  wire(sumOut, masterGain);
 
   const dac = add({ name: "dac~", x: 50, y: gainY + SPACING });
-  wire(gain, dac);
-  wire(gain, dac, 0, 1);
+  wire(masterGain, dac);
+  wire(masterGain, dac, 0, 1);
 
   // ─── Ports ──────────────────────────────────────
   const ports = [];
   for (const voice of voices) {
-    const trigIdx = triggerIndices.get(voice);
+    const trigIdx = triggerInputNodes.get(voice);
     if (trigIdx !== undefined) {
-      ports.push({ name: `trig_${voice}`, type: "control" as const, direction: "input" as const, nodeIndex: trigIdx, port: 0 });
+      ports.push({
+        name: `trig_${voice}`,
+        type: "control" as const,
+        direction: "input" as const,
+        nodeIndex: trigIdx,
+        port: 0,
+      });
     }
   }
-  ports.push({ name: "audio", type: "audio" as const, direction: "output" as const, nodeIndex: gain, port: 0, ioNodeIndex: dac });
+  // clock_in — always exposed (external clock drives internal 16-step sequencer)
+  ports.push({
+    name: "clock_in",
+    type: "control" as const,
+    direction: "input" as const,
+    nodeIndex: floatNode,
+    port: 0,
+    ...(metroNode !== undefined && { ioNodeIndex: metroNode }),
+  });
+  ports.push({
+    name: "clock_out",
+    type: "control" as const,
+    direction: "output" as const,
+    nodeIndex: counterNode,
+    port: 0,
+  });
+  ports.push({
+    name: "audio",
+    type: "audio" as const,
+    direction: "output" as const,
+    nodeIndex: masterGain,
+    port: 0,
+    ioNodeIndex: dac,
+  });
 
   // ─── Parameters ─────────────────────────────────
   const parameters: ParameterDescriptor[] = [
@@ -463,23 +603,24 @@ export function buildDrumMachine(params: DrumMachineParams = {}): RackableSpec {
       default: amplitude,
       unit: "",
       curve: "linear",
-      nodeIndex: gain,
+      nodeIndex: masterGain,
       inlet: 1,
       category: "amplitude",
     },
   ];
 
   // Per-voice volume parameters
-  for (let i = 0; i < voices.length; i++) {
+  for (const voice of voices) {
+    const refs = builtVoices.get(voice)!;
     parameters.push({
-      name: `volume_${voices[i]}`,
-      label: `${voices[i].toUpperCase()} Volume`,
+      name: `volume_${voice}`,
+      label: `${voice.toUpperCase()} Volume`,
       min: 0,
       max: 1,
       default: amplitude,
       unit: "",
       curve: "linear",
-      nodeIndex: voiceResults[i].levelNode,
+      nodeIndex: refs.levelNode,
       inlet: 1,
       category: "amplitude",
     });

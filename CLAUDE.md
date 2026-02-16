@@ -42,7 +42,7 @@ synthlab-mcp-server/
 │   │   ├── presets.ts        # 9 genre presets
 │   │   ├── moods.ts          # 7 mood adjustments
 │   │   ├── scales.ts         # 10 scales × 12 keys
-│   │   ├── wiring-rules.ts   # Auto-wiring (clock→seq→synth→mixer→fx)
+│   │   ├── wiring-rules.ts   # Auto-wiring (clock→seq/drums→synth→mixer→fx)
 │   │   └── song-mapper.ts    # SongSpec → CreateRackInput
 │   ├── controllers/          # MIDI controller integration
 │   │   ├── auto-mapper.ts    # 4-phase auto-mapping
@@ -68,7 +68,7 @@ synthlab-mcp-server/
 │   ├── parse-cpp-enums.ts    # C++ enum parser
 │   ├── parse-svg-width.ts    # SVG panel → HP conversion
 │   └── update-readme-stats.ts
-├── tests/                    # 29 test files, 642 tests
+├── tests/                    # 34 test files, 741 tests
 ├── docs/                     # PRD, Architecture, Rules, Plan, Scaffold
 ├── .github/workflows/ci.yml  # Node 18/20/22 matrix + npm publish
 ├── package.json
@@ -101,7 +101,8 @@ synthlab-mcp-server/
 ### `create_from_template`
 - Input: template name + params + optional outputPath
 - Templates: synth, sequencer, drum-machine, reverb, mixer, clock, chaos, maths, turing-machine, granular, bridge
-- Use: "Make me a drum machine with 4 voices at 130 BPM"
+- Drum-machine: 808-style synthesis, 5 voices (BD/SN/CH/OH/CP), 16-step patterns, morphX/Y, tap tempo, clock_in/clock_out, OH/CH choke
+- Use: "Make me a drum machine with 5 voices at 130 BPM"
 
 ### `create_rack`
 - Input: array of module specs + wiring + controller config + optional outputDir
@@ -162,7 +163,7 @@ synthlab-mcp-server/
 ```bash
 npm run build          # Bundle with tsup (single-file ESM)
 npm run dev            # Watch mode
-npm run test           # Run vitest (642 tests)
+npm run test           # Run vitest (741 tests)
 npm run lint           # TypeScript type-check (tsc --noEmit)
 npm run inspect        # Test MCP server with inspector
 npm run vcv:build-registry  # Scrape C++ repos → generate VCV registries

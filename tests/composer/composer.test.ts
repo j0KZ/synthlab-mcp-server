@@ -169,7 +169,7 @@ describe("generateWiringPlan", () => {
 
   it("drums + synth → mixer with 2 channels", () => {
     const modules: ResolvedModule[] = [
-      { id: "drums", template: "drum-machine", role: "drums", params: { voices: ["bd", "hh"] } },
+      { id: "drums", template: "drum-machine", role: "drums", params: { voices: ["bd", "ch"] } },
       { id: "lead_synth", template: "synth", role: "lead", params: {} },
     ];
     const { modules: flat, wires } = generateWiringPlan(
@@ -202,8 +202,10 @@ describe("generateWiringPlan", () => {
       modules, [], [], [1, 4], 130,
     );
     expect(flat.some((m) => m.template === "clock")).toBe(true);
-    expect(wires.some((w) => w.input === "trig_bd")).toBe(true);
-    expect(wires.some((w) => w.input === "trig_sn")).toBe(true);
+    // drum-machine now uses clock_in (drives internal 16-step patterns)
+    expect(wires.some((w) => w.to === "drums" && w.input === "clock_in")).toBe(true);
+    // per-voice triggers NOT auto-wired by composer (available for manual racks)
+    expect(wires.some((w) => w.input === "trig_bd")).toBe(false);
   });
 
   it("no clock when only pads (synths without sequencers)", () => {
@@ -246,15 +248,15 @@ describe("generateWiringPlan", () => {
     const modules: ResolvedModule[] = [
       { id: "seq1", template: "sequencer", params: {} },
       { id: "seq2", template: "sequencer", params: {} },
-      { id: "drums", template: "drum-machine", params: { voices: ["bd", "sn", "hh"] } },
+      { id: "drums", template: "drum-machine", params: { voices: ["bd", "sn", "ch"] } },
     ];
     const { wires } = generateWiringPlan(modules, [], [], [1, 4], 120);
     const clockWires = wires.filter((w) => w.from === "clock");
-    // 2 sequencers + 3 drum voices = 5 unique targets
-    expect(clockWires).toHaveLength(5);
+    // 2 sequencers + 1 drum-machine clock_in = 3 unique targets
+    expect(clockWires).toHaveLength(3);
     // Each output port should be unique
     const outputs = clockWires.map((w) => w.output);
-    expect(new Set(outputs).size).toBe(5);
+    expect(new Set(outputs).size).toBe(3);
   });
 
   it("flat modules contain ALL modules (clock + instruments + mixer + effects)", () => {

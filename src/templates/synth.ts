@@ -48,7 +48,7 @@ export function buildSynth(params: SynthParams = {}): RackableSpec {
   const filterType = params.filter ?? "lowpass";
   const freq = params.frequency ?? 440;
   const cutoff = params.cutoff ?? 1000;
-  const amplitude = params.amplitude ?? 0.3;
+  const amplitude = params.amplitude ?? 0.7;
   const envType = params.envelope ?? "none";
   const envP = params.envelopeParams ?? {};
 
@@ -305,7 +305,7 @@ export function buildSynth(params: SynthParams = {}): RackableSpec {
     default: {
       const hip = add({
         name: "hip~",
-        args: [Math.round(cutoff * 0.1)],
+        args: [Math.round(cutoff * 0.3)],
         x: COL_OSC,
         y: fy,
       });
