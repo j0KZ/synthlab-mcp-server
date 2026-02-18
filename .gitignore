@@ -7,3 +7,5 @@ test.vcv
 rack/
 coverage/
 nul
+.env
+.env.*

@@ -45,6 +45,7 @@
     "type": "git",
     "url": "git+https://github.com/j0KZ/synthlab-mcp-server.git"
   },
+  "homepage": "https://github.com/j0KZ/synthlab-mcp-server#readme",
   "author": "j0KZ",
   "license": "MIT",
   "dependencies": {
