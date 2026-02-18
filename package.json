@@ -1,6 +1,6 @@
 {
   "name": "synthlab-mcp-server",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "MCP Server for Pure Data & VCV Rack — parse, generate, analyze, and control Pd patches and VCV Rack modules with AI",
   "type": "module",
   "main": "dist/index.js",
